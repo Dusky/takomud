@@ -26,6 +26,12 @@ class Room(ObjectParent, DefaultRoom):
         self.db.recommended_level = 1
         self.db.encounter_table = []     # [{key, hp, attack_bonus, defense, damage_dice, xp_reward}]
         self.db.encounter_chance = 0.3   # probability per script tick
+        self.db.cleared = False          # set True when a boss dies here
+        self.db.cleared_boss = None
+        self.db.hazard_hp = 0            # HP damage per hazard tick
+        self.db.hazard_sanity = 0        # Sanity damage per hazard tick
+        self.db.hazard_fear = 0          # Fear added per hazard tick
+        self.db.hazard_message = ""      # Message shown to characters
 
     def return_appearance(self, looker, **kwargs):
         if self.db.dark and not self._has_light(looker):
@@ -40,6 +46,9 @@ class Room(ObjectParent, DefaultRoom):
             char_level = getattr(looker.db, "level", 1) or 1
             level_color = "|r" if char_level < rec else "|x"
             text = f"{level_color}[Recommended: Level {rec}+]|n\n" + text
+        if self.db.cleared:
+            boss = self.db.cleared_boss or "the boss"
+            text = f"|x[{boss} has been defeated here]|n\n" + text
         return text
 
     def _has_light(self, looker):

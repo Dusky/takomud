@@ -170,9 +170,29 @@ class Mob(NPC):
         pass
 
     def at_post_move(self, source_location, **kwargs):
-        """Check for aggro targets when mob moves."""
+        """Check for aggro targets when mob moves. Trigger hunter traps."""
+        self._check_trap()
         if self.db.aggro and not self.db.combat_target:
             self._check_aggro()
+
+    def _check_trap(self):
+        room = self.location
+        if not room:
+            return
+        trap_script = room.scripts.get("hunter_trap")
+        if not trap_script:
+            return
+        import random as _r
+        dmg = _r.randint(5, 15)
+        self.take_damage(dmg)
+        room.msg_contents(
+            f"|xA hidden snare snaps shut on {self.key}! ({dmg} damage, stunned.)|n"
+        )
+        self.db.status_effect = "stun"
+        if hasattr(self, "apply_status_effect"):
+            self.apply_status_effect("stun")
+        for s in trap_script:
+            s.stop()
 
     def at_object_receive(self, obj, source_location, move_type="move", **kwargs):
         if (self.db.aggro and not self.db.combat_target
@@ -243,6 +263,25 @@ class Boss(Mob):
         if hp > 0:
             self._check_phases(hp)
         return hp
+
+    def at_death(self, killer=None):
+        # Broadcast globally before deletion
+        import evennia
+        from evennia.utils import utils as ev_utils
+        killer_name = killer.name if killer else "an unknown hand"
+        evennia.utils.logger.log_info(f"Boss killed: {self.key} by {killer_name}")
+        for session in evennia.SESSION_HANDLER.values():
+            puppet = session.get_puppet()
+            if puppet and ev_utils.inherits_from(puppet, "typeclasses.characters.Character"):
+                puppet.msg(
+                    f"\n|R=== {self.key.upper()} HAS FALLEN ===|n\n"
+                    f"|xSlain by {killer_name}. The silence after is total.|n\n"
+                )
+        # Mark the room as cleared
+        if self.location:
+            self.location.db.cleared = True
+            self.location.db.cleared_boss = self.key
+        super().at_death(killer=killer)
 
     def _check_phases(self, current_hp):
         phases = self.db.phases or []

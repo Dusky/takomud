@@ -357,6 +357,426 @@ class CmdTrack(BaseCommand):
             self.caller.msg("|xYou sense nothing immediately hostile nearby.|n")
 
 
+class CmdWho(BaseCommand):
+    """
+    List currently connected players.
+
+    Usage:
+      who
+    """
+
+    key = "who"
+    help_category = "General"
+
+    def func(self):
+        import evennia
+        from evennia.utils import utils as ev_utils
+        lines = ["\n|w=== Who is Here ===|n"]
+        count = 0
+        for session in evennia.SESSION_HANDLER.values():
+            puppet = session.get_puppet()
+            if not puppet:
+                continue
+            if not ev_utils.inherits_from(puppet, "typeclasses.characters.Character"):
+                continue
+            level = puppet.db.level or 1
+            cls = (puppet.db.char_class or "none").title()
+            loc = puppet.location.key if puppet.location else "Unknown"
+            lines.append(f"  |w{puppet.name:<20}|n Lv{level} {cls:<10} — {loc}")
+            count += 1
+        if count == 0:
+            lines.append("  |xNo one but the darkness.|n")
+        else:
+            lines.append(f"\n|x{count} soul{'s' if count != 1 else ''} present.|n")
+        self.caller.msg("\n".join(lines))
+
+
+class CmdWhere(BaseCommand):
+    """
+    Admin: show location of all connected players.
+
+    Usage:
+      where
+    """
+
+    key = "where"
+    locks = "cmd:perm(Admin)"
+    help_category = "Admin"
+
+    def func(self):
+        import evennia
+        from evennia.utils import utils as ev_utils
+        lines = ["\n|w=== Player Locations ===|n"]
+        for session in evennia.SESSION_HANDLER.values():
+            puppet = session.get_puppet()
+            if not puppet or not ev_utils.inherits_from(puppet, "typeclasses.characters.Character"):
+                continue
+            loc = puppet.location
+            loc_str = f"{loc.key} ({loc.dbref})" if loc else "None"
+            lines.append(f"  {puppet.name} — {loc_str}")
+        self.caller.msg("\n".join(lines))
+
+
+class CmdShout(BaseCommand):
+    """
+    Shout a message that echoes into adjacent rooms.
+
+    Usage:
+      shout <message>
+
+    Costs 5 Fear. Everyone in your room and all adjacent rooms hears it.
+    """
+
+    key = "shout"
+    aliases = ["yell"]
+    help_category = "General"
+
+    def func(self):
+        if not self.args:
+            self.caller.msg("Shout what?")
+            return
+        msg = self.args.strip()
+        self.caller.adjust_fear(5)
+        self.caller.location.msg_contents(
+            f"|y{self.caller.name} shouts: \"{msg}\"|n"
+        )
+        for exit_obj in (self.caller.location.exits or []):
+            dest = exit_obj.destination
+            if dest:
+                dest.msg_contents(
+                    f"|xA voice from nearby shouts: \"{msg}\"|n"
+                )
+
+
+class CmdUnlock(BaseCommand):
+    """
+    Unlock a locked exit using a key item.
+
+    Usage:
+      unlock <direction>
+      unlock <direction> with <item>
+
+    If the exit requires a key item, you must be carrying it.
+    Some exits can be unlocked without a key.
+    """
+
+    key = "unlock"
+    help_category = "General"
+
+    def func(self):
+        if not self.args:
+            self.caller.msg("Unlock which exit?")
+            return
+
+        args = self.args.strip()
+        key_name = None
+        if " with " in args:
+            dir_name, key_name = args.split(" with ", 1)
+            dir_name = dir_name.strip()
+            key_name = key_name.strip()
+        else:
+            dir_name = args
+
+        exit_obj = None
+        for ex in self.caller.location.exits:
+            if ex.key.lower() == dir_name.lower() or dir_name.lower() in [a.lower() for a in ex.aliases.all()]:
+                exit_obj = ex
+                break
+
+        if not exit_obj:
+            self.caller.msg(f"No exit '{dir_name}' here.")
+            return
+
+        if not exit_obj.db.locked:
+            self.caller.msg(f"The {exit_obj.key} exit is not locked.")
+            return
+
+        required_key = exit_obj.db.key_item
+        if required_key:
+            from evennia.utils import utils as ev_utils
+            key_item = None
+            for item in self.caller.contents:
+                if item.key.lower() == required_key.lower():
+                    key_item = item
+                    break
+            if not key_item:
+                self.caller.msg(
+                    f"|rYou need {required_key} to unlock this.|n"
+                )
+                return
+
+        exit_obj.db.locked = False
+        self.caller.msg(f"|gYou unlock the {exit_obj.key} exit.|n")
+        self.caller.location.msg_contents(
+            f"|x{self.caller.name} unlocks the {exit_obj.key} exit.|n",
+            exclude=[self.caller],
+        )
+
+
+class CmdLock(BaseCommand):
+    """
+    Lock an unlocked exit (must have the required key item).
+
+    Usage:
+      lock <direction>
+    """
+
+    key = "lock"
+    help_category = "General"
+
+    def func(self):
+        if not self.args:
+            self.caller.msg("Lock which exit?")
+            return
+        dir_name = self.args.strip()
+        exit_obj = None
+        for ex in self.caller.location.exits:
+            if ex.key.lower() == dir_name.lower():
+                exit_obj = ex
+                break
+        if not exit_obj:
+            self.caller.msg(f"No exit '{dir_name}' here.")
+            return
+        if exit_obj.db.locked:
+            self.caller.msg(f"The {exit_obj.key} exit is already locked.")
+            return
+        required_key = exit_obj.db.key_item
+        if required_key:
+            has_key = any(item.key.lower() == required_key.lower() for item in self.caller.contents)
+            if not has_key:
+                self.caller.msg(f"|rYou need {required_key} to lock this.|n")
+                return
+        exit_obj.db.locked = True
+        self.caller.msg(f"|xYou lock the {exit_obj.key} exit.|n")
+        self.caller.location.msg_contents(
+            f"|x{self.caller.name} locks the {exit_obj.key} exit.|n",
+            exclude=[self.caller],
+        )
+
+
+class CmdAbility(BaseCommand):
+    """
+    Use your character class's active ability.
+
+    Usage:
+      ability
+      ability <target>     (for Analyze, Commune, Trap)
+
+    Abilities:
+      survivor  — Surge: spend 20 HP, gain +5 attack for 30 seconds
+      scholar   — Analyze: reveal a target's HP, defense, and attack
+      cultist   — Commune: ask a nearby Hollow mob for hidden lore
+      hunter    — Trap: set a snare; next mob entering takes damage and is stunned
+      vagrant   — Blink: teleport to any previously discovered room (costs 20 Sanity)
+    """
+
+    key = "ability"
+    aliases = ["ab", "special"]
+    help_category = "General"
+
+    def func(self):
+        cls = self.caller.db.char_class
+        if not cls:
+            self.caller.msg("|xYou have no class, and therefore no special ability.|n")
+            return
+        getattr(self, f"_do_{cls}", self._do_unknown)()
+
+    def _do_survivor(self):
+        char = self.caller
+        hp = char.db.hp or 0
+        if hp <= 20:
+            char.msg("|rYou are too wounded to surge.|n")
+            return
+        if char.scripts.get("surge_script"):
+            char.msg("|yYou are already surging.|n")
+            return
+        from typeclasses.scripts import SurgeScript
+        char.adjust_hp(-20)
+        char.db.attack_bonus = (char.db.attack_bonus or 1) + 5
+        char.scripts.add(SurgeScript)
+        char.msg("|YSurge. Pain sharpens into focus. +5 attack for 30 seconds.|n")
+        char.location.msg_contents(
+            f"|y{char.name} surges with desperate energy.|n", exclude=[char]
+        )
+
+    def _do_scholar(self):
+        if not self.args:
+            self.caller.msg("Analyze what? Usage: ability <target>")
+            return
+        target = self.caller.search(self.args.strip())
+        if not target:
+            return
+        hp = target.db.hp or "?"
+        hp_max = target.db.hp_max or "?"
+        atk = target.db.attack_bonus or 0
+        defense = target.db.defense or 10
+        effect = target.db.status_effect or "none"
+        self.caller.msg(
+            f"\n|wAnalysis — {target.key}:|n\n"
+            f"  HP      {hp}/{hp_max}\n"
+            f"  Attack  +{atk}\n"
+            f"  Defense {defense}\n"
+            f"  Status  {effect}\n"
+        )
+
+    def _do_cultist(self):
+        from evennia.utils import utils as ev_utils
+        hollow_mobs = [
+            obj for obj in self.caller.location.contents
+            if ev_utils.inherits_from(obj, "typeclasses.npcs.Mob")
+            and (obj.db.faction or "") == "hollow"
+        ]
+        if not hollow_mobs:
+            self.caller.msg("|xThere are no Hollow here to commune with.|n")
+            return
+        mob = hollow_mobs[0]
+        lore = mob.db.dialogue or {}
+        response = (
+            lore.get("commune")
+            or lore.get("greeting")
+            or "|xThe Hollow regards you. Something passes between you that has no words.|n"
+        )
+        self.caller.msg(f"|m{mob.key}: {response}|n")
+        mob.db.combat_target = None
+        for s in mob.scripts.all():
+            if s.key == "combat_script":
+                s.stop()
+
+    def _do_hunter(self):
+        room = self.caller.location
+        if room.scripts.get("hunter_trap"):
+            self.caller.msg("|xA trap is already set here.|n")
+            return
+        from typeclasses.scripts import HunterTrapScript
+        room.scripts.add(HunterTrapScript)
+        room.db._trap_setter = self.caller.dbref
+        self.caller.msg("|xYou set a hidden snare. The next creature to enter will trigger it.|n")
+        room.msg_contents(
+            f"|x{self.caller.name} moves carefully near the floor.|n",
+            exclude=[self.caller],
+        )
+
+    def _do_vagrant(self):
+        if not self.args:
+            discovered = self.caller.db.discovered_rooms or []
+            count = len(discovered)
+            self.caller.msg(
+                f"|xYou have mapped {count} room{'s' if count != 1 else ''}.\n"
+                f"Usage: ability <room name or partial name>|n"
+            )
+            return
+        san = self.caller.db.sanity or 0
+        if san < 20:
+            self.caller.msg("|rYour mind is too fractured to find the path.|n")
+            return
+        target_name = self.args.strip().lower()
+        import evennia
+        from typeclasses.rooms import Room
+        discovered = self.caller.db.discovered_rooms or []
+        for dbref in discovered:
+            results = evennia.search_object(dbref, use_dbref=True, typeclass=Room)
+            if results and target_name in results[0].key.lower():
+                dest = results[0]
+                self.caller.adjust_sanity(-20)
+                self.caller.msg(f"|mThe space between folds. You are elsewhere.|n")
+                self.caller.move_to(dest, quiet=True)
+                self.caller.msg(self.caller.location.return_appearance(self.caller))
+                return
+        self.caller.msg(f"|xYou haven't been anywhere matching '{self.args.strip()}'.|n")
+
+    def _do_unknown(self):
+        self.caller.msg("|xYour class has no registered active ability.|n")
+
+
+class CmdSetHazard(BaseCommand):
+    """
+    Staff command: configure an environmental hazard for the current room.
+
+    Usage:
+      sethazard                    — show current hazard settings
+      sethazard/hp <N>             — deal N HP damage per tick (default tick: 15s)
+      sethazard/sanity <N>         — deal N Sanity damage per tick
+      sethazard/fear <N>           — deal N Fear per tick
+      sethazard/msg <text>         — set the message shown each tick
+      sethazard/interval <seconds> — change tick interval
+      sethazard/start              — attach HazardScript to this room
+      sethazard/stop               — remove HazardScript from this room
+      sethazard/clear              — zero all damage values and stop
+    """
+
+    key = "sethazard"
+    locks = "cmd:perm(Builder)"
+    help_category = "Building"
+
+    def func(self):
+        room = self.caller.location
+        if not room:
+            self.caller.msg("No location.")
+            return
+        switch = self.switches[0] if self.switches else ""
+
+        if switch == "hp":
+            try:
+                room.db.hazard_hp = int(self.args.strip())
+                self.caller.msg(f"Hazard HP damage set to {room.db.hazard_hp} per tick.")
+            except ValueError:
+                self.caller.msg("Provide an integer.")
+        elif switch == "sanity":
+            try:
+                room.db.hazard_sanity = int(self.args.strip())
+                self.caller.msg(f"Hazard Sanity damage set to {room.db.hazard_sanity} per tick.")
+            except ValueError:
+                self.caller.msg("Provide an integer.")
+        elif switch == "fear":
+            try:
+                room.db.hazard_fear = int(self.args.strip())
+                self.caller.msg(f"Hazard Fear set to {room.db.hazard_fear} per tick.")
+            except ValueError:
+                self.caller.msg("Provide an integer.")
+        elif switch == "msg":
+            room.db.hazard_message = self.args.strip()
+            self.caller.msg("Hazard message set.")
+        elif switch == "interval":
+            try:
+                interval = max(5, int(self.args.strip()))
+                for s in room.scripts.all():
+                    if s.key == "hazard_script":
+                        s.interval = interval
+                self.caller.msg(f"Hazard interval set to {interval}s.")
+            except ValueError:
+                self.caller.msg("Provide an integer (seconds).")
+        elif switch == "start":
+            from typeclasses.scripts import HazardScript
+            if room.scripts.get("hazard_script"):
+                self.caller.msg("HazardScript already running.")
+            else:
+                room.scripts.add(HazardScript)
+                self.caller.msg("HazardScript started.")
+        elif switch == "stop":
+            for s in room.scripts.all():
+                if s.key == "hazard_script":
+                    s.stop()
+            self.caller.msg("HazardScript stopped.")
+        elif switch == "clear":
+            room.db.hazard_hp = 0
+            room.db.hazard_sanity = 0
+            room.db.hazard_fear = 0
+            room.db.hazard_message = ""
+            for s in room.scripts.all():
+                if s.key == "hazard_script":
+                    s.stop()
+            self.caller.msg("Hazard cleared.")
+        else:
+            running = bool(room.scripts.get("hazard_script"))
+            self.caller.msg(
+                f"Hazard — HP:{room.db.hazard_hp or 0} "
+                f"San:{room.db.hazard_sanity or 0} "
+                f"Fear:{room.db.hazard_fear or 0} "
+                f"Script:{'on' if running else 'off'}\n"
+                f"Message: {room.db.hazard_message or '(none)'}"
+            )
+
+
 class CmdSetEncounter(BaseCommand):
     """
     Staff command: configure random encounters for the current room.

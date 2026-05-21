@@ -498,6 +498,100 @@ Survivor class: once per hour, a killing blow leaves you at 1 HP instead.
         """,
     },
     {
+        "key": "who",
+        "category": "General",
+        "text": """
+|wwho|n — List all currently connected players.
+
+Shows each player's name, level, class, and current location.
+
+Usage: who
+        """,
+    },
+    {
+        "key": "shout",
+        "aliases": ["yell"],
+        "category": "General",
+        "text": """
+|wshout <message>|n — Shout so nearby rooms can hear you.
+
+Your message is heard in your current room and all adjacent rooms.
+Costs 5 Fear — screaming in the dark is not without consequence.
+
+Usage: shout Is anyone out there?
+        """,
+    },
+    {
+        "key": "unlock",
+        "category": "General",
+        "text": """
+|wunlock <direction>|n            — Unlock a locked exit (if no key required)
+|wunlock <direction> with <item>|n — Unlock using a specific key item
+
+Some exits require a specific item (a key, a sigil, a severed hand).
+You must be carrying the required item. Unlocking does not consume the key.
+
+Usage: unlock north
+Usage: unlock east with iron key
+        """,
+    },
+    {
+        "key": "lock",
+        "category": "General",
+        "text": """
+|wlock <direction>|n — Lock an unlocked exit.
+
+Requires the same key item used to unlock it, if one was required.
+Other players can still unlock it if they have the key.
+
+Usage: lock north
+        """,
+    },
+    {
+        "key": "ability",
+        "aliases": ["ab", "special"],
+        "category": "Character",
+        "text": """
+|wability|n or |wability <target>|n — Use your class active ability.
+
+  |wSurvivor — Surge|n
+    Spend 20 HP. Gain +5 attack bonus for 30 seconds.
+    Cannot be used if HP ≤ 20.
+
+  |wScholar — Analyze|n
+    Reveal a target's current HP, defense, attack, and status effect.
+    Usage: ability <target>
+
+  |wCultist — Commune|n
+    Speak with a Hollow mob in the room. They may share hidden lore.
+    Also clears their combat target (they stop attacking you).
+
+  |wHunter — Trap|n
+    Set a hidden snare in the current room. The next mob to enter
+    takes 5-15 damage and is stunned. Auto-disarms after 5 minutes.
+
+  |wVagrant — Blink|n
+    Teleport to any previously discovered room. Costs 20 Sanity.
+    Usage: ability <room name or partial name>
+        """,
+    },
+    {
+        "key": "hazards",
+        "aliases": ["hazard", "environmental"],
+        "category": "World",
+        "text": """
+|wEnvironmental Hazards|n — Rooms that damage everyone present.
+
+Some rooms are inherently hostile: acid fog, cursed ground, psychic static.
+Every 15 seconds (configurable), all characters in the room take:
+  - HP damage (if hazard_hp > 0)
+  - Sanity damage (if hazard_sanity > 0)
+  - Fear increase (if hazard_fear > 0)
+
+The hazard message is shown each tick. The only protection is to leave.
+        """,
+    },
+    {
         "key": "reputation gates",
         "aliases": ["rep gate", "reputation requirement"],
         "category": "World",

@@ -269,6 +269,118 @@ class StatusEffectScript(DefaultScript):
             self.stop()
 
 
+class HazardScript(DefaultScript):
+    """
+    Attached to a Room. Each tick deals damage/sanity/fear loss to all
+    characters present. Configure via room.db.hazard_* attributes.
+    """
+
+    def at_script_creation(self):
+        self.key = "hazard_script"
+        self.desc = "Environmental hazard."
+        self.interval = 15
+        self.persistent = True
+        self.start_delay = True
+
+    def at_repeat(self):
+        room = self.obj
+        if not room:
+            self.stop()
+            return
+        from evennia.utils import utils as ev_utils
+        hp_dmg = room.db.hazard_hp or 0
+        san_dmg = room.db.hazard_sanity or 0
+        fear_dmg = room.db.hazard_fear or 0
+        msg = room.db.hazard_message or "|rThe environment tears at you.|n"
+        for obj in list(room.contents):
+            if ev_utils.inherits_from(obj, "typeclasses.characters.Character"):
+                obj.msg(msg)
+                if hp_dmg:
+                    obj.adjust_hp(-hp_dmg)
+                if san_dmg:
+                    obj.adjust_sanity(-san_dmg)
+                if fear_dmg:
+                    obj.adjust_fear(fear_dmg)
+
+
+class MerchantRestockScript(DefaultScript):
+    """
+    Attached to an NPC merchant. Restores shop_stock quantities each interval.
+    shop_stock: {prototype_key: current_qty}  (-1 = unlimited)
+    restock_list: [{prototype_key, qty, max_qty}]
+    """
+
+    def at_script_creation(self):
+        self.key = "merchant_restock"
+        self.desc = "Restocks merchant inventory."
+        self.interval = 3600   # 1 hour default
+        self.persistent = True
+        self.start_delay = True
+
+    def at_repeat(self):
+        merchant = self.obj
+        if not merchant:
+            self.stop()
+            return
+        restock = merchant.db.restock_list or []
+        stock = dict(merchant.db.shop_stock or {})
+        restocked = 0
+        for entry in restock:
+            key = entry.get("prototype_key")
+            max_qty = entry.get("max_qty", 5)
+            current = stock.get(key, 0)
+            if current < max_qty:
+                stock[key] = max_qty
+                restocked += 1
+        merchant.db.shop_stock = stock
+        if restocked:
+            merchant.location and merchant.location.msg_contents(
+                f"|x{merchant.key} restocks their wares.|n"
+            )
+
+
+class SurgeScript(DefaultScript):
+    """Survivor class Surge ability. +5 attack bonus for 30 seconds."""
+
+    def at_script_creation(self):
+        self.key = "surge_script"
+        self.desc = "Survivor surge."
+        self.interval = 30
+        self.persistent = False
+        self.start_delay = False
+        self.repeats = 1  # fires once to end the buff
+
+    def at_repeat(self):
+        char = self.obj
+        if not char:
+            self.stop()
+            return
+        char.db.attack_bonus = max(1, (char.db.attack_bonus or 1) - 5)
+        char.msg("|yThe surge fades. Your focus returns to its usual edge.|n")
+        self.stop()
+
+
+class HunterTrapScript(DefaultScript):
+    """
+    Attached to a Room after a Hunter sets a trap.
+    The next mob entering the room is stunned and takes damage.
+    """
+
+    def at_script_creation(self):
+        self.key = "hunter_trap"
+        self.desc = "Hunter's trap."
+        self.interval = 300   # auto-disarm after 5 minutes
+        self.persistent = False
+        self.start_delay = True
+        self.repeats = 1
+
+    def at_repeat(self):
+        room = self.obj
+        if room:
+            room.msg_contents("|xThe trap rusts and falls apart.|n")
+        self.stop()
+
+
 class RestScript(DefaultScript):
     """
     Attached to a Character while resting.

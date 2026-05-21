@@ -6,7 +6,9 @@ from evennia import default_cmds
 
 from commands.horror import (
     CmdStat, CmdLore, CmdAtmosphere, CmdSetLore, CmdSetDark,
-    CmdRead, CmdCharClass, CmdScore, CmdTrack, CmdMap, CmdSetEncounter,
+    CmdRead, CmdCharClass, CmdScore, CmdTrack, CmdMap,
+    CmdSetEncounter, CmdSetHazard,
+    CmdWho, CmdWhere, CmdShout, CmdUnlock, CmdLock, CmdAbility,
 )
 from commands.combat import CmdAttack, CmdFlee, CmdConsider, CmdStop
 from commands.inventory import (
@@ -32,10 +34,18 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdSetLore())
         self.add(CmdSetDark())
         self.add(CmdSetEncounter())
+        self.add(CmdSetHazard())
+        # Social
+        self.add(CmdWho())
+        self.add(CmdShout())
         # Character / exploration
         self.add(CmdCharClass())
         self.add(CmdTrack())
         self.add(CmdMap())
+        self.add(CmdAbility())
+        # Navigation
+        self.add(CmdUnlock())
+        self.add(CmdLock())
         # Combat
         self.add(CmdAttack())
         self.add(CmdStop())
@@ -72,6 +82,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdGenerate())
         self.add(CmdGenerateStart())
         self.add(CmdGenerateQuest())
+        self.add(CmdWhere())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):

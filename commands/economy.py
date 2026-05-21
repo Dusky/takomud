@@ -56,12 +56,16 @@ class CmdBrowse(BaseCommand):
         shop = merchant.db.shop
         lines = [f"\n|w--- {merchant.key}'s Wares ---|n"]
 
+        stock = merchant.db.shop_stock or {}
         spawned = []
         try:
             for entry in shop:
                 proto_key = _entry_proto_key(entry)
                 if not proto_key:
                     continue
+                qty = stock.get(proto_key, -1)  # -1 = unlimited
+                if qty == 0:
+                    continue  # out of stock
                 try:
                     items = spawner.spawn(proto_key)
                     item = items[0] if items else None
@@ -70,10 +74,10 @@ class CmdBrowse(BaseCommand):
 
                 if item:
                     price = _entry_price(entry, item)
-                    lines.append(f"  {item.key:<30} — {price} gold")
+                    qty_str = f" ({qty} left)" if qty > 0 else ""
+                    lines.append(f"  {item.key:<30} — {price} gold{qty_str}")
                     spawned.append(item)
                 else:
-                    # Fallback: format the prototype_key
                     name = proto_key.replace("_", " ").title()
                     price = entry.get("price", "?") if isinstance(entry, dict) else "?"
                     lines.append(f"  {name:<30} — {price} gold")
@@ -132,6 +136,13 @@ class CmdBuy(BaseCommand):
                 continue
 
             if want in item.key.lower():
+                # Check finite stock
+                stock = dict(merchant.db.shop_stock or {})
+                qty = stock.get(proto_key, -1)
+                if qty == 0:
+                    item.delete()
+                    self.caller.msg(f"|rOut of stock.|n")
+                    return
                 price = _entry_price(entry, item)
                 gold = self.caller.db.gold or 0
                 if gold < price:
@@ -140,6 +151,9 @@ class CmdBuy(BaseCommand):
                     return
                 # Complete the purchase
                 self.caller.db.gold = gold - price
+                if qty > 0:
+                    stock[proto_key] = qty - 1
+                    merchant.db.shop_stock = stock
                 item.location = self.caller
                 self.caller.msg(
                     f"|gYou pay {price} gold and receive {item.key}.|n"
