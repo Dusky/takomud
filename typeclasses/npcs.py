@@ -97,11 +97,14 @@ class NPC(ObjectParent, DefaultCharacter):
             elif xp:
                 killer.db.xp = (killer.db.xp or 0) + xp
                 killer.msg(f"|y+{xp} XP|n")
+            # Gold drop
+            gold = self.db.gold_drop or 0
+            if gold and hasattr(killer, "gain_gold"):
+                killer.gain_gold(gold)
             # Faction reputation consequence
             faction = self.db.faction or "neutral"
             if faction != "neutral" and hasattr(killer, "adjust_reputation"):
                 killer.adjust_reputation(faction, -5)
-                # Opposing factions gain rep
                 _FACTION_ENEMIES = {
                     "remnants": [], "hollow": ["remnants", "wardens"],
                     "scholars": [], "wardens": ["hollow", "unspoken"],
@@ -109,6 +112,9 @@ class NPC(ObjectParent, DefaultCharacter):
                 }
                 for ally in _FACTION_ENEMIES.get(faction, []):
                     killer.adjust_reputation(ally, 2)
+        # Queue respawn
+        if self.db.respawn_delay and self.location:
+            _queue_respawn(self)
         self.delete()
 
     def _drop_loot(self):
@@ -137,11 +143,15 @@ class Mob(NPC):
         self.db.is_mob = True
         self.db.aggro = True
         self.db.attack_bonus = 5
-        self.db.damage_dice = "1d6"    # string like "2d8"
+        self.db.damage_dice = "1d6"
         self.db.defense = 8
         self.db.hp = 30
         self.db.hp_max = 30
         self.db.xp_reward = 25
+        self.db.gold_drop = 0
+        self.db.respawn_delay = 300     # seconds; 0 = no respawn
+        self.db.wanders = False
+        self.db.status_effect = None    # "bleed", "poison", "stun", or None
 
     def get_display_name(self, looker, **kwargs):
         return f"|r{self.key}|n"
@@ -198,6 +208,10 @@ class Mob(NPC):
             if hasattr(target, "adjust_hp"):
                 target.adjust_hp(-dmg)
             target.adjust_fear(5)
+            # Apply status effect if mob has one
+            effect = self.db.status_effect
+            if effect and hasattr(target, "apply_status_effect") and _r.random() < 0.35:
+                target.apply_status_effect(effect)
         else:
             target.msg(f"|y{self.key} swings at you and misses.|n")
 
@@ -250,3 +264,15 @@ def _roll_dice(dice_str):
         return sum(_r.randint(1, int(sides)) for _ in range(int(count)))
     except Exception:
         return 1
+
+
+def _queue_respawn(mob):
+    """Add a dead mob to the global RespawnScript queue."""
+    import evennia
+    try:
+        scripts = evennia.search_script("respawn_manager")
+        if not scripts:
+            return
+        scripts[0].enqueue(mob)
+    except Exception:
+        pass

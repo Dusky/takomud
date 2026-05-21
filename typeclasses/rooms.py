@@ -23,6 +23,7 @@ class Room(ObjectParent, DefaultRoom):
         self.db.dark = False
         self.db.atmosphere = []
         self.db.lore = ""
+        self.db.recommended_level = 1
 
     def return_appearance(self, looker, **kwargs):
         if self.db.dark and not self._has_light(looker):
@@ -38,6 +39,21 @@ class Room(ObjectParent, DefaultRoom):
                 if obj.db.is_light_source and obj.db.lit:
                     return True
         return False
+
+    def at_object_receive(self, obj, source_location, move_type="move", **kwargs):
+        """Warn characters entering rooms above their recommended level."""
+        super().at_object_receive(obj, source_location, move_type=move_type, **kwargs)
+        rec = self.db.recommended_level or 1
+        if rec <= 1:
+            return
+        if not utils.inherits_from(obj, "typeclasses.characters.Character"):
+            return
+        char_level = obj.db.level or 1
+        if char_level < rec:
+            obj.msg(
+                f"|rWarning: this area is recommended for level {rec}+. "
+                f"You are level {char_level}. Proceed with caution.|n"
+            )
 
     def emit_atmosphere(self):
         """Send a random atmosphere string to all occupants."""

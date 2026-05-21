@@ -135,6 +135,57 @@ class CmdGenerateStart(BaseCommand):
         threading.Thread(target=_run, daemon=True, name="takomud-genstart").start()
 
 
+class CmdGenerateQuest(BaseCommand):
+    """
+    Generate a faction-specific questline via the Claude API.
+
+    Usage:
+      genquest <faction>
+
+    Faction must be one of: remnants, hollow, scholars, wardens, unspoken
+
+    Places a herald NPC in The Threshold and registers the questline.
+    Runs in a background thread. ANTHROPIC_API_KEY must be set.
+    """
+
+    key = "genquest"
+    locks = "cmd:perm(Admin)"
+    help_category = "Admin"
+
+    FACTIONS = ("remnants", "hollow", "scholars", "wardens", "unspoken")
+
+    def func(self):
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            self.caller.msg("|rANTHROPIC_API_KEY is not set.|n")
+            return
+
+        faction = self.args.strip().lower()
+        if faction not in self.FACTIONS:
+            self.caller.msg(
+                f"|rUnknown faction.|n Valid: {', '.join(self.FACTIONS)}"
+            )
+            return
+
+        caller = self.caller
+
+        def _run():
+            try:
+                from world.generator import generate_faction_questline
+                caller.msg(f"|y[GenQuest] Generating {faction} questline...|n")
+                data = generate_faction_questline(faction)
+                if data:
+                    caller.msg(
+                        f"|g[GenQuest] Done — '{data.get('title')}' questline "
+                        f"for {faction} created.|n"
+                    )
+                else:
+                    caller.msg("|r[GenQuest] Generator returned no data.|n")
+            except Exception as exc:
+                caller.msg(f"|r[GenQuest] Error: {exc}|n")
+
+        threading.Thread(target=_run, daemon=True, name="takomud-genquest").start()
+
+
 def _write_start_location(dbref):
     """Persist START_LOCATION and DEFAULT_HOME to secret_settings.py."""
     import os

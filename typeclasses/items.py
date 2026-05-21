@@ -38,6 +38,11 @@ class Item(ObjectParent, DefaultObject):
     def at_get(self, getter, **kwargs):
         if self.db.item_type == "quest":
             getter.msg(f"|yYou take {self.key}. Something about it feels important.|n")
+        try:
+            from world.quest_system import check_collect_trigger
+            check_collect_trigger(getter, self.key)
+        except Exception:
+            pass
 
     def at_drop(self, dropper, **kwargs):
         if not self.db.droppable:

@@ -6,13 +6,13 @@ from evennia import default_cmds
 
 from commands.horror import (
     CmdStat, CmdLore, CmdAtmosphere, CmdSetLore, CmdSetDark,
-    CmdRead, CmdCharClass, CmdScore, CmdTrack,
+    CmdRead, CmdCharClass, CmdScore, CmdTrack, CmdMap,
 )
 from commands.combat import CmdAttack, CmdFlee, CmdConsider, CmdStop
 from commands.inventory import CmdInventory, CmdEquip, CmdUnequip, CmdUse, CmdDrop, CmdGive
 from commands.quest import CmdQuest, CmdTalk, CmdAbandon
 from commands.economy import CmdBrowse, CmdBuy, CmdSell
-from commands.admin import CmdGenerate, CmdGenerateStart
+from commands.admin import CmdGenerate, CmdGenerateStart, CmdGenerateQuest
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -28,9 +28,10 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdAtmosphere())
         self.add(CmdSetLore())
         self.add(CmdSetDark())
-        # Character
+        # Character / exploration
         self.add(CmdCharClass())
         self.add(CmdTrack())
+        self.add(CmdMap())
         # Combat
         self.add(CmdAttack())
         self.add(CmdStop())
@@ -60,6 +61,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         super().at_cmdset_creation()
         self.add(CmdGenerate())
         self.add(CmdGenerateStart())
+        self.add(CmdGenerateQuest())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):

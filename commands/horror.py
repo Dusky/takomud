@@ -355,3 +355,54 @@ class CmdTrack(BaseCommand):
             self.caller.msg("|xYou sense:|n\n" + "\n".join(found))
         else:
             self.caller.msg("|xYou sense nothing immediately hostile nearby.|n")
+
+
+class CmdMap(BaseCommand):
+    """
+    Display a text map of your location and nearby rooms.
+
+    Usage:
+      map
+    """
+
+    key = "map"
+    aliases = ["m"]
+    help_category = "General"
+
+    def func(self):
+        from evennia.utils import utils as ev_utils
+        char = self.caller
+        origin = char.location
+        if not origin:
+            char.msg("You are nowhere.")
+            return
+
+        # Collect rooms up to 2 hops away with their direction paths
+        visited = {}   # room -> (hop_distance, direction_label)
+        queue = [(origin, 0, "")]
+        seen = {origin.id}
+
+        while queue:
+            room, depth, label = queue.pop(0)
+            visited[room] = (depth, label)
+            if depth >= 2:
+                continue
+            for ex in room.exits:
+                dest = ex.destination
+                if dest and dest.id not in seen:
+                    seen.add(dest.id)
+                    child_label = ex.key if depth == 0 else f"{label}>{ex.key}"
+                    queue.append((dest, depth + 1, child_label))
+
+        lines = [f"\n|w[Map — {origin.name}]|n"]
+        lines.append(f"  |w*|n |Y{origin.name}|n  ← you are here")
+
+        for room, (depth, label) in sorted(visited.items(), key=lambda x: x[1][0]):
+            if room is origin:
+                continue
+            rec_level = room.db.recommended_level or 1
+            level_tag = f" |x(rec. lv{rec_level})|n" if rec_level > 1 else ""
+            prefix = "  " * depth
+            lines.append(f"{prefix}  [{label}] {room.name}{level_tag}")
+
+        char.msg("\n".join(lines) + "\n")

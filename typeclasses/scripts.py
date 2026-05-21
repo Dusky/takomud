@@ -121,6 +121,154 @@ class SanityHallucinationScript(DefaultScript):
         char.msg(f"|m{random.choice(_HALLUCINATIONS)}|n")
 
 
+class RespawnScript(DefaultScript):
+    """Global script managing mob respawn queue."""
+
+    def at_script_creation(self):
+        self.key = "respawn_manager"
+        self.desc = "Manages mob respawn timers."
+        self.interval = 30
+        self.persistent = True
+        self.start_delay = True
+        self.db.queue = []
+
+    def enqueue(self, mob):
+        import time
+        if not mob.location:
+            return
+        entry = {
+            "respawn_at": time.time() + (mob.db.respawn_delay or 300),
+            "room_dbref": mob.location.dbref,
+            "mob_data": {
+                "key":          mob.key,
+                "desc":         mob.db.desc or "",
+                "hp":           mob.db.hp_max or mob.db.hp or 30,
+                "attack_bonus": mob.db.attack_bonus or 3,
+                "defense":      mob.db.defense or 8,
+                "damage_dice":  mob.db.damage_dice or "1d6",
+                "xp_reward":    mob.db.xp_reward or 25,
+                "gold_drop":    mob.db.gold_drop or 0,
+                "faction":      mob.db.faction or "neutral",
+                "aggro":        mob.db.aggro if mob.db.aggro is not None else True,
+                "wanders":      mob.db.wanders or False,
+                "loot_table":   list(mob.db.loot_table or []),
+                "respawn_delay":mob.db.respawn_delay or 300,
+                "status_effect":mob.db.status_effect,
+                "is_boss":      bool(mob.db.is_boss),
+            },
+        }
+        queue = list(self.db.queue or [])
+        queue.append(entry)
+        self.db.queue = queue
+
+    def at_repeat(self):
+        import time
+        import evennia
+        now = time.time()
+        queue = list(self.db.queue or [])
+        remaining = []
+        for entry in queue:
+            if now >= entry["respawn_at"]:
+                self._spawn(entry)
+            else:
+                remaining.append(entry)
+        self.db.queue = remaining
+
+    def _spawn(self, entry):
+        import evennia
+        from typeclasses.npcs import Mob, Boss
+        from typeclasses.scripts import WanderScript
+        results = evennia.search_object(entry["room_dbref"], use_dbref=True)
+        if not results:
+            return
+        room = results[0]
+        d = entry["mob_data"]
+        cls = Boss if d.get("is_boss") else Mob
+        mob = evennia.create_object(cls, key=d["key"], location=room)
+        mob.db.desc = d["desc"]
+        mob.db.hp = d["hp"]
+        mob.db.hp_max = d["hp"]
+        mob.db.attack_bonus = d["attack_bonus"]
+        mob.db.defense = d["defense"]
+        mob.db.damage_dice = d["damage_dice"]
+        mob.db.xp_reward = d["xp_reward"]
+        mob.db.gold_drop = d["gold_drop"]
+        mob.db.faction = d["faction"]
+        mob.db.aggro = d["aggro"]
+        mob.db.wanders = d["wanders"]
+        mob.db.loot_table = d["loot_table"]
+        mob.db.respawn_delay = d["respawn_delay"]
+        mob.db.status_effect = d["status_effect"]
+        if d["wanders"]:
+            mob.scripts.add(WanderScript)
+        room.msg_contents(f"|x{mob.key} emerges from the dark.|n")
+
+
+class WanderScript(DefaultScript):
+    """Attached to a Mob. Moves it through a random exit periodically."""
+
+    def at_script_creation(self):
+        self.key = "wander_script"
+        self.desc = "Mob wandering."
+        self.interval = 90
+        self.persistent = True
+        self.start_delay = True
+
+    def at_repeat(self):
+        mob = self.obj
+        if not mob or mob.db.combat_target or not mob.location:
+            return
+        exits = mob.location.exits
+        if not exits:
+            return
+        exit_obj = random.choice(exits)
+        mob.move_to(exit_obj.destination, quiet=True)
+
+
+class StatusEffectScript(DefaultScript):
+    """Attached to a Character. Ticks down bleed/poison/stun each interval."""
+
+    def at_script_creation(self):
+        self.key = "status_effects"
+        self.desc = "Processes active status effects."
+        self.interval = 3
+        self.persistent = False
+        self.start_delay = True
+
+    def at_repeat(self):
+        char = self.obj
+        if not char:
+            self.stop()
+            return
+        effects = dict(char.db.status_effects or {})
+        if not effects:
+            self.stop()
+            return
+        to_remove = []
+        for name, data in effects.items():
+            if name == "bleed":
+                dmg = data.get("dmg", 3)
+                char.msg(f"|rYou bleed for {dmg} damage.|n")
+                char.adjust_hp(-dmg)
+            elif name == "poison":
+                dmg = data.get("dmg", 2)
+                san = data.get("san", 1)
+                char.msg(f"|gPoison: -{dmg} HP, -{san} Sanity.|n")
+                char.adjust_hp(-dmg)
+                char.adjust_sanity(-san)
+            elif name == "stun":
+                char.msg("|yYou are stunned and cannot act.|n")
+            data["ticks"] -= 1
+            if data["ticks"] <= 0:
+                to_remove.append(name)
+                char.msg(f"|y{name.title()} has worn off.|n")
+        for name in to_remove:
+            del effects[name]
+        char.db.status_effects = effects
+        if not effects:
+            self.stop()
+
+
 class PlayerCombatScript(DefaultScript):
     """
     Attached to a Character when combat begins.

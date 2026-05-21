@@ -47,6 +47,7 @@ class Character(ObjectParent, DefaultCharacter):
         self.db.discovered_rooms = []
         self.db.combat_target = None
         self.db.grit_last_used = 0
+        self.db.status_effects = {}     # {"bleed": {"dmg": 3, "ticks": 3}, ...}
         self.db.reputation = {
             "remnants": 0, "hollow": 0, "scholars": 0,
             "wardens": 0, "unspoken": 0,
@@ -203,6 +204,25 @@ class Character(ObjectParent, DefaultCharacter):
     # ------------------------------------------------------------------
     # Reputation
     # ------------------------------------------------------------------
+
+    def apply_status_effect(self, effect_type):
+        """Inflict bleed, poison, or stun. Starts StatusEffectScript if needed."""
+        effects = dict(self.db.status_effects or {})
+        if effect_type == "bleed":
+            effects["bleed"] = {"dmg": 4, "ticks": 4}
+            self.msg("|rYou are bleeding.|n")
+        elif effect_type == "poison":
+            effects["poison"] = {"dmg": 2, "san": 1, "ticks": 6}
+            self.msg("|gPoison courses through you.|n")
+        elif effect_type == "stun":
+            effects["stun"] = {"ticks": 2}
+            self.msg("|yYou are stunned.|n")
+        else:
+            return
+        self.db.status_effects = effects
+        from typeclasses.scripts import StatusEffectScript
+        if not self.scripts.get("status_effects"):
+            self.scripts.add(StatusEffectScript)
 
     def adjust_reputation(self, faction, amount):
         rep = dict(self.db.reputation or {})

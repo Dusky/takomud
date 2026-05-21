@@ -20,43 +20,38 @@ needed on the Evennia side.
 
 MSSPTable = {
     # Required fields
-    "NAME": "Mygame",  # usually the same as SERVERNAME
+    "NAME": "Takomud",
     # Generic
-    "CRAWL DELAY": "-1",  # limit how often crawler may update the listing. -1 for no limit
-    "HOSTNAME": "",  # telnet hostname
-    "PORT": ["4000"],  # telnet port - most important port should be *last* in list!
+    "CRAWL DELAY": "-1",
+    "HOSTNAME": "",
+    "PORT": ["4000"],
     "CODEBASE": "Evennia",
-    "CONTACT": "",  # email for contacting the mud
-    "CREATED": "",  # year MUD was created
-    "ICON": "",  # url to icon 32x32 or larger; <32kb.
-    "IP": "",  # current or new IP address
-    "LANGUAGE": "",  # name of language used, e.g. English
-    "LOCATION": "",  # full English name of server country
-    "MINIMUM AGE": "0",  # set to 0 if not applicable
-    "WEBSITE": "",  # http:// address to your game website
+    "CONTACT": "",
+    "CREATED": "2024",
+    "ICON": "",
+    "IP": "",
+    "LANGUAGE": "English",
+    "LOCATION": "",
+    "MINIMUM AGE": "18",
+    "WEBSITE": "",
     # Categorisation
     "FAMILY": "Evennia",
-    "GENRE": "None",  # Adult, Fantasy, Historical, Horror, Modern, None, or Science Fiction
-    # Gameplay: Adventure, Educational, Hack and Slash, None,
-    # Player versus Player, Player versus Environment,
-    # Roleplaying, Simulation, Social or Strategy
-    "GAMEPLAY": "",
-    "STATUS": "Open Beta",  # Allowed: Alpha, Closed Beta, Open Beta, Live
-    "GAMESYSTEM": "Custom",  # D&D, d20 System, World of Darkness, etc. Use Custom if homebrew
-    # Subgenre: LASG, Medieval Fantasy, World War II, Frankenstein,
-    # Cyberpunk, Dragonlance, etc. Or None if not applicable.
-    "SUBGENRE": "None",
+    "GENRE": "Horror",
+    "GAMEPLAY": "Roleplaying",
+    "STATUS": "Alpha",
+    "GAMESYSTEM": "Custom",
+    "SUBGENRE": "Cosmic Horror",
     # World
     "AREAS": "0",
     "HELPFILES": "0",
     "MOBILES": "0",
     "OBJECTS": "0",
-    "ROOMS": "0",  # use 0 if room-less
-    "CLASSES": "0",  # use 0 if class-less
-    "LEVELS": "0",  # use 0 if level-less
-    "RACES": "0",  # use 0 if race-less
-    "SKILLS": "0",  # use 0 if skill-less
-    # Protocols set to 1 or 0; should usually not be changed)
+    "ROOMS": "0",
+    "CLASSES": "5",
+    "LEVELS": "10",
+    "RACES": "0",
+    "SKILLS": "0",
+    # Protocols
     "ANSI": "1",
     "GMCP": "1",
     "MSDP": "1",
@@ -72,21 +67,20 @@ MSSPTable = {
     "VT100": "0",
     "PUEBLO": "0",
     "ZMP": "0",
-    # Commercial set to 1 or 0)
+    # Commercial
     "PAY TO PLAY": "0",
     "PAY FOR PERKS": "0",
-    # Hiring  set to 1 or 0)
+    # Hiring
     "HIRING BUILDERS": "0",
     "HIRING CODERS": "0",
-    # Extended variables
-    # World
+    # Extended
     "DBSIZE": "0",
     "EXITS": "0",
     "EXTRA DESCRIPTIONS": "0",
     "MUDPROGS": "0",
     "MUDTRIGS": "0",
     "RESETS": "0",
-    # Game  (set to 1 or 0, or one of the given alternatives)
+    # Game
     "ADULT MATERIAL": "0",
     "MULTICLASSING": "0",
     "NEWBIE FRIENDLY": "0",
@@ -94,12 +88,11 @@ MSSPTable = {
     "PLAYER CLANS": "0",
     "PLAYER CRAFTING": "0",
     "PLAYER GUILDS": "0",
-    "EQUIPMENT SYSTEM": "None",  # "None", "Level", "Skill", "Both"
-    "MULTIPLAYING": "None",  # "None", "Restricted", "Full"
-    "PLAYERKILLING": "None",  # "None", "Restricted", "Full"
-    "QUEST SYSTEM": "None",  # "None", "Immortal Run", "Automated", "Integrated"
-    "ROLEPLAYING": "None",  # "None", "Accepted", "Encouraged", "Enforced"
-    "TRAINING SYSTEM": "None",  # "None", "Level", "Skill", "Both"
-    # World originality: "All Stock", "Mostly Stock", "Mostly Original", "All Original"
+    "EQUIPMENT SYSTEM": "Level",
+    "MULTIPLAYING": "Restricted",
+    "PLAYERKILLING": "None",
+    "QUEST SYSTEM": "Integrated",
+    "ROLEPLAYING": "Encouraged",
+    "TRAINING SYSTEM": "Level",
     "WORLD ORIGINALITY": "All Original",
 }

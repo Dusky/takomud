@@ -106,6 +106,7 @@ AREA_TOOL = {
                         "lore":        {"type": "string"},
                         "atmosphere":  {"type": "array", "items": {"type": "string"}},
                         "dark":        {"type": "boolean"},
+                        "recommended_level": {"type": "integer", "minimum": 1, "description": "Suggested minimum player level for this area"},
                         "exits": {
                             "type": "object",
                             "description": "direction -> room key (use existing room keys to connect to existing world)",
@@ -156,6 +157,14 @@ AREA_TOOL = {
                         "xp_reward":    {"type": "integer"},
                         "faction":      {"type": "string"},
                         "aggro":        {"type": "boolean"},
+                        "gold_drop":    {"type": "integer", "minimum": 0, "description": "Gold coins dropped on death"},
+                        "wanders":      {"type": "boolean", "description": "Does this mob wander randomly?"},
+                        "status_effect": {
+                            "type": "string",
+                            "enum": ["bleed", "poison", "stun"],
+                            "description": "Optional status effect inflicted on hit (35% chance)"
+                        },
+                        "respawn_delay": {"type": "integer", "minimum": 0, "description": "Seconds before respawn (0 = no respawn)"},
                         "loot_table": {
                             "type": "array",
                             "items": {
@@ -801,6 +810,7 @@ def _apply_area(area_data, state):
         room.db.lore = room_data.get("lore", "")
         room.db.dark = room_data.get("dark", False)
         room.db.atmosphere = room_data.get("atmosphere", [])
+        room.db.recommended_level = room_data.get("recommended_level", 1)
 
         if room.db.atmosphere:
             room.scripts.add(AtmosphereScript)
@@ -917,9 +927,16 @@ def _apply_area(area_data, state):
         mob.db.defense = mob_data.get("defense", 8)
         mob.db.damage_dice = mob_data.get("damage_dice", "1d6")
         mob.db.xp_reward = mob_data.get("xp_reward", 25)
+        mob.db.gold_drop = mob_data.get("gold_drop", 0)
         mob.db.faction = mob_data.get("faction", "unspoken")
         mob.db.aggro = mob_data.get("aggro", True)
+        mob.db.wanders = mob_data.get("wanders", False)
+        mob.db.status_effect = mob_data.get("status_effect", None)
+        mob.db.respawn_delay = mob_data.get("respawn_delay", 300)
         mob.db.loot_table = mob_data.get("loot_table", [])
+        if mob.db.wanders:
+            from typeclasses.scripts import WanderScript
+            mob.scripts.add(WanderScript)
         state["all_npcs"][key] = mob.dbref
         log.info(f"  + Mob: {key} in {mob_data.get('room_key')} (#{mob.id})")
 
@@ -1107,6 +1124,183 @@ def generate(cycles=1, delay=10, api_key=None):
             time.sleep(delay)
 
     log.info("Generation complete.")
+
+
+# ---------------------------------------------------------------------------
+# Faction questline generator
+# ---------------------------------------------------------------------------
+
+FACTION_QUESTLINE_TOOL = {
+    "name": "create_faction_questline",
+    "description": "Create a multi-stage questline for a specific faction in Takomud.",
+    "input_schema": {
+        "type": "object",
+        "required": ["faction", "title", "premise", "herald_npc", "stages"],
+        "properties": {
+            "faction": {
+                "type": "string",
+                "enum": ["remnants", "hollow", "scholars", "wardens", "unspoken"],
+            },
+            "title":   {"type": "string"},
+            "premise": {"type": "string"},
+            "herald_npc": {
+                "type": "object",
+                "required": ["key", "desc", "dialogue"],
+                "properties": {
+                    "key":      {"type": "string"},
+                    "desc":     {"type": "string"},
+                    "dialogue": {
+                        "type": "object",
+                        "properties": {
+                            "greeting": {"type": "string"},
+                            "topics":   {"type": "object", "additionalProperties": {"type": "string"}},
+                        },
+                    },
+                },
+            },
+            "stages": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 5,
+                "items": {
+                    "type": "object",
+                    "required": ["title", "text", "objective"],
+                    "properties": {
+                        "title": {"type": "string"},
+                        "text":  {"type": "string"},
+                        "objective": {
+                            "type": "object",
+                            "required": ["type"],
+                            "properties": {
+                                "type":    {"type": "string", "enum": ["kill", "collect", "visit", "talk", "deliver"]},
+                                "target":  {"type": "string"},
+                                "count":   {"type": "integer", "minimum": 1},
+                                "current": {"type": "integer", "default": 0},
+                                "item":    {"type": "string"},
+                                "room":    {"type": "string"},
+                                "npc":     {"type": "string"},
+                            },
+                        },
+                        "reward": {
+                            "type": "object",
+                            "properties": {
+                                "xp":         {"type": "integer"},
+                                "gold":        {"type": "integer"},
+                                "reputation":  {"type": "object", "additionalProperties": {"type": "integer"}},
+                            },
+                        },
+                    },
+                },
+            },
+            "conclusion": {"type": "string"},
+        },
+    },
+}
+
+_FACTION_WORLD_CONTEXT = {
+    "remnants": "Survivors of the breaking — cautious, practical, mistrustful of outsiders. They hoard information and resources. Their questline should explore what they lost and what they protect.",
+    "hollow":   "The changed ones — once human, now something adjacent. They are not monsters, but they are not people anymore. Their questline should blur the line between predator and victim.",
+    "scholars": "Archivists of the old world — knowledge is their religion and their poison. They record horrors without intervening. Their questline should force a choice between knowledge and action.",
+    "wardens":  "Former enforcers maintaining order through controlled violence. They know the rules are broken but enforce them anyway. Their questline should expose their complicity.",
+    "unspoken": "Something else entirely. They should not exist. Their questline is about the player approaching something they cannot understand — and what understanding costs.",
+}
+
+
+def generate_faction_questline(faction, api_key=None, herald_room_key=None):
+    """
+    Generate a faction-specific questline via Claude.
+    Returns questline data dict or None.
+    faction: one of remnants/hollow/scholars/wardens/unspoken
+    herald_room_key: where to place the herald NPC (defaults to The Threshold).
+    """
+    import anthropic
+    from world.world_bible import GENERATION_PROMPT_SYSTEM
+
+    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        log.warning("ANTHROPIC_API_KEY not set — skipping faction questline generation.")
+        return None
+
+    faction_context = _FACTION_WORLD_CONTEXT.get(faction, "")
+    user_prompt = f"""Create a faction questline for the {faction.upper()} faction in Takomud.
+
+Faction context: {faction_context}
+
+Requirements:
+- 3-5 stages, escalating in stakes
+- A herald NPC who is a member of this faction and gives the quest
+- Each stage uses structured objective dicts
+- Rewards include XP, gold, and reputation changes (positive for faction, negative for enemies)
+- The conclusion must change something — an NPC's fate, a room's meaning, or the player's understanding
+- Match the faction's ideology in all dialogue and quest text
+- Tone: horror throughout, but each faction has its own flavor
+
+Use the create_faction_questline tool.
+"""
+
+    client = anthropic.Anthropic(api_key=key)
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=5000,
+        system=GENERATION_PROMPT_SYSTEM,
+        tools=[FACTION_QUESTLINE_TOOL],
+        tool_choice={"type": "tool", "name": "create_faction_questline"},
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "create_faction_questline":
+            data = block.input
+            _apply_faction_questline(data, herald_room_key=herald_room_key)
+            return data
+
+    log.error(f"No tool_use block in Claude response for {faction} questline")
+    return None
+
+
+def _apply_faction_questline(data, herald_room_key=None):
+    """Place herald NPC and register faction questline."""
+    import evennia
+    from typeclasses.npcs import NPC
+    from typeclasses.rooms import Room
+    from world import quest_registry
+
+    herald = data.get("herald_npc", {})
+    if not herald:
+        return
+
+    room_key = herald_room_key or "The Threshold"
+    results = evennia.search_object(room_key, typeclass=Room)
+    if not results:
+        log.warning(f"Cannot place faction herald: room '{room_key}' not found.")
+        return
+
+    room = results[0]
+    npc = evennia.create_object(NPC, key=herald["key"], location=room)
+    npc.db.desc = herald.get("desc", "")
+    npc.db.faction = data.get("faction", "neutral")
+    npc.db.dialogue = herald.get("dialogue", {})
+
+    faction = data.get("faction", "unknown")
+    quest_key = f"faction_{faction}"
+    quest_data = {
+        "key": quest_key,
+        "title": data.get("title", f"{faction.title()} Questline"),
+        "desc": data.get("premise", ""),
+        "giver_npc_key": herald["key"],
+        "stages": [
+            {"text": s["text"], "objective": s["objective"]}
+            for s in data.get("stages", [])
+        ],
+        "reward": {"xp": 300, "gold": 50, "reputation": {faction: 20}},
+    }
+    quest_registry.register(quest_data)
+    npc.db.quest_keys = [quest_key]
+
+    state = _load_state()
+    state["all_npcs"][herald["key"]] = npc.dbref
+    _save_state(state)
+    log.info(f"  + Faction questline herald: {herald['key']} ({faction}) in {room_key}")
 
 
 # ---------------------------------------------------------------------------

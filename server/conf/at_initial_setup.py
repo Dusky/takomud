@@ -73,6 +73,21 @@ def at_initial_setup():
     except Exception as exc:
         log.error(f"Starting zone generation failed: {exc}", exc_info=True)
 
+    _start_global_scripts()
+
+
+def _start_global_scripts():
+    """Ensure the global RespawnScript is running."""
+    try:
+        import evennia
+        from typeclasses.scripts import RespawnScript
+        existing = evennia.search_script("respawn_manager")
+        if not existing:
+            evennia.create_script(RespawnScript)
+            log.info("=== Global RespawnScript started ===")
+    except Exception as exc:
+        log.error(f"Could not start global scripts: {exc}", exc_info=True)
+
 
 def _persist_start_location(dbref):
     """Write START_LOCATION and DEFAULT_HOME to secret_settings.py."""
