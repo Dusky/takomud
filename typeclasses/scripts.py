@@ -269,6 +269,117 @@ class StatusEffectScript(DefaultScript):
             self.stop()
 
 
+class RestScript(DefaultScript):
+    """
+    Attached to a Character while resting.
+    Recovers HP and Sanity each tick. Cancelled if combat_target is set.
+    """
+
+    def at_script_creation(self):
+        self.key = "rest_script"
+        self.desc = "Resting recovery."
+        self.interval = 10
+        self.persistent = False
+        self.start_delay = True
+        self.db.ticks = 0
+
+    def at_repeat(self):
+        char = self.obj
+        if not char:
+            self.stop()
+            return
+        if char.db.combat_target:
+            char.msg("|rYou are jolted out of your rest.|n")
+            self.stop()
+            return
+        hp_max = char.db.hp_max or 100
+        san_max = char.db.sanity_max or 100
+        hp = char.db.hp or 0
+        san = char.db.sanity or 100
+
+        hp_gain = min(5, hp_max - hp)
+        san_gain = min(3, san_max - san)
+
+        if hp_gain > 0:
+            char.adjust_hp(hp_gain)
+        if san_gain > 0:
+            char.adjust_sanity(san_gain)
+
+        self.db.ticks = (self.db.ticks or 0) + 1
+        if hp_gain == 0 and san_gain == 0:
+            char.msg("|xYou are fully recovered. You stand.|n")
+            self.stop()
+            return
+        if self.db.ticks % 3 == 0:
+            char.msg(f"|xYou rest. (+{hp_gain} HP, +{san_gain} Sanity)|n")
+
+
+class RandomEncounterScript(DefaultScript):
+    """
+    Attached to a Room. On each tick, chance to spawn a transient mob from
+    the room's encounter_table. Mob deletes itself when it leaves the room
+    or is killed. Does not respawn.
+    """
+
+    def at_script_creation(self):
+        self.key = "random_encounter"
+        self.desc = "Random encounter spawner."
+        self.interval = 120
+        self.persistent = True
+        self.start_delay = True
+
+    def at_repeat(self):
+        room = self.obj
+        if not room:
+            self.stop()
+            return
+        table = room.db.encounter_table or []
+        if not table:
+            return
+
+        from evennia.utils import utils as ev_utils
+        has_players = any(
+            ev_utils.inherits_from(obj, "typeclasses.characters.Character")
+            for obj in room.contents
+        )
+        if not has_players:
+            return
+
+        chance = room.db.encounter_chance or 0.3
+        if random.random() > chance:
+            return
+
+        entry = random.choice(table)
+        prototype_key = entry.get("prototype_key")
+        mob_key = entry.get("key", "Lurking Shape")
+
+        mob = None
+        if prototype_key:
+            try:
+                from evennia.prototypes import spawner
+                objs = spawner.spawn(prototype_key)
+                if objs:
+                    mob = objs[0]
+                    mob.location = room
+            except Exception:
+                pass
+
+        if not mob:
+            from typeclasses.npcs import Mob
+            import evennia
+            mob = evennia.create_object(Mob, key=mob_key, location=room)
+            mob.db.hp = entry.get("hp", 20)
+            mob.db.hp_max = mob.db.hp
+            mob.db.attack_bonus = entry.get("attack_bonus", 2)
+            mob.db.defense = entry.get("defense", 8)
+            mob.db.damage_dice = entry.get("damage_dice", "1d4")
+            mob.db.xp_reward = entry.get("xp_reward", 15)
+            mob.db.aggro = True
+            mob.db.respawn_delay = 0  # transient — no respawn
+
+        room.msg_contents(f"|xSomething emerges from the shadows. {mob.key}.|n")
+
+
 class PlayerCombatScript(DefaultScript):
     """
     Attached to a Character when combat begins.

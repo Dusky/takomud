@@ -24,14 +24,23 @@ class Room(ObjectParent, DefaultRoom):
         self.db.atmosphere = []
         self.db.lore = ""
         self.db.recommended_level = 1
+        self.db.encounter_table = []     # [{key, hp, attack_bonus, defense, damage_dice, xp_reward}]
+        self.db.encounter_chance = 0.3   # probability per script tick
 
     def return_appearance(self, looker, **kwargs):
         if self.db.dark and not self._has_light(looker):
             return (
                 "|[000|wDarkness.|n\n"
-                "The black is absolute. You can feel something in it."
+                "The black is absolute. You can feel something in it.\n"
+                "|x(You cannot see the exits.)|n"
             )
-        return super().return_appearance(looker, **kwargs)
+        text = super().return_appearance(looker, **kwargs)
+        rec = self.db.recommended_level or 1
+        if rec > 1:
+            char_level = getattr(looker.db, "level", 1) or 1
+            level_color = "|r" if char_level < rec else "|x"
+            text = f"{level_color}[Recommended: Level {rec}+]|n\n" + text
+        return text
 
     def _has_light(self, looker):
         if utils.inherits_from(looker, "typeclasses.characters.Character"):

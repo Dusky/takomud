@@ -357,6 +357,88 @@ class CmdTrack(BaseCommand):
             self.caller.msg("|xYou sense nothing immediately hostile nearby.|n")
 
 
+class CmdSetEncounter(BaseCommand):
+    """
+    Staff command: configure random encounters for the current room.
+
+    Usage:
+      setencounter                              — list current encounter table
+      setencounter/add <key> <hp> <dice>        — add a mob template (e.g. add "Pale Shade" 20 1d4)
+      setencounter/chance <0.0-1.0>             — set spawn probability per tick
+      setencounter/clear                        — remove all encounter entries
+      setencounter/start                        — attach RandomEncounterScript to this room
+      setencounter/stop                         — remove RandomEncounterScript from this room
+    """
+
+    key = "setencounter"
+    locks = "cmd:perm(Builder)"
+    help_category = "Building"
+
+    def func(self):
+        room = self.caller.location
+        if not room:
+            self.caller.msg("No location.")
+            return
+
+        switch = self.switches[0] if self.switches else ""
+
+        if switch == "add":
+            parts = self.args.strip().split(None, 2)
+            if len(parts) < 3:
+                self.caller.msg("Usage: setencounter/add <key> <hp> <damage_dice>")
+                return
+            mob_key, hp_str, dice = parts[0], parts[1], parts[2]
+            try:
+                hp = int(hp_str)
+            except ValueError:
+                self.caller.msg("HP must be an integer.")
+                return
+            table = list(room.db.encounter_table or [])
+            table.append({"key": mob_key, "hp": hp, "damage_dice": dice, "xp_reward": hp})
+            room.db.encounter_table = table
+            self.caller.msg(f"Added: {mob_key} (HP {hp}, {dice}) to encounter table.")
+
+        elif switch == "chance":
+            try:
+                val = float(self.args.strip())
+                val = max(0.0, min(1.0, val))
+            except ValueError:
+                self.caller.msg("Provide a float between 0.0 and 1.0.")
+                return
+            room.db.encounter_chance = val
+            self.caller.msg(f"Encounter chance set to {val:.0%}.")
+
+        elif switch == "clear":
+            room.db.encounter_table = []
+            self.caller.msg("Encounter table cleared.")
+
+        elif switch == "start":
+            from typeclasses.scripts import RandomEncounterScript
+            if room.scripts.get("random_encounter"):
+                self.caller.msg("RandomEncounterScript already running.")
+            else:
+                room.scripts.add(RandomEncounterScript)
+                self.caller.msg("RandomEncounterScript started.")
+
+        elif switch == "stop":
+            for s in room.scripts.all():
+                if s.key == "random_encounter":
+                    s.stop()
+            self.caller.msg("RandomEncounterScript stopped.")
+
+        else:
+            table = room.db.encounter_table or []
+            chance = room.db.encounter_chance or 0.3
+            running = bool(room.scripts.get("random_encounter"))
+            if not table:
+                self.caller.msg(f"No encounter table set. Chance: {chance:.0%}. Script: {'running' if running else 'off'}.")
+                return
+            lines = [f"Encounter table ({chance:.0%} chance, script {'on' if running else 'off'}):"]
+            for e in table:
+                lines.append(f"  {e.get('key')} — HP {e.get('hp')} {e.get('damage_dice')}")
+            self.caller.msg("\n".join(lines))
+
+
 class CmdMap(BaseCommand):
     """
     Display a text map of your location and nearby rooms.

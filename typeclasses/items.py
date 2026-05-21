@@ -36,6 +36,14 @@ class Item(ObjectParent, DefaultObject):
         self.db.weight = 1
 
     def at_get(self, getter, **kwargs):
+        # Gold piles: auto-convert to gold attribute
+        if self.db.item_type == "misc" and self.db.value and not self.db.droppable is False:
+            if "coin" in self.key.lower() or "gold" in self.key.lower():
+                amount = self.db.value
+                if amount and hasattr(getter, "gain_gold"):
+                    getter.gain_gold(amount)
+                    self.delete()
+                    return
         if self.db.item_type == "quest":
             getter.msg(f"|yYou take {self.key}. Something about it feels important.|n")
         try:
@@ -97,6 +105,58 @@ class Item(ObjectParent, DefaultObject):
         elif t == "light":
             name = f"|Y{name}|n" if self.db.lit else f"|x{name}|n"
         return name
+
+
+class Container(Item):
+    """
+    A container item: chest, bag, box. Can hold other items.
+    Supports open/close state and optional locking.
+    """
+
+    def at_object_creation(self):
+        super().at_object_creation()
+        self.db.item_type = "misc"
+        self.db.is_container = True
+        self.db.is_open = False
+        self.db.locked = False
+        self.db.lock_key = None    # key item name required to unlock
+        self.db.capacity = 10      # max items
+
+    def get_display_name(self, looker, **kwargs):
+        state = "|yopen|n" if self.db.is_open else "|xclosed|n"
+        return f"|C{self.key}|n [{state}]"
+
+    def open_container(self, opener):
+        if self.db.locked:
+            opener.msg(f"|r{self.key} is locked.|n")
+            return
+        if self.db.is_open:
+            opener.msg(f"{self.key} is already open.")
+            return
+        self.db.is_open = True
+        opener.msg(f"|yYou open {self.key}.|n")
+        contents = [obj for obj in self.contents]
+        if contents:
+            names = ", ".join(obj.get_display_name(opener) for obj in contents)
+            opener.msg(f" Inside: {names}")
+        else:
+            opener.msg(f" |xIt is empty.|n")
+
+    def close_container(self, closer):
+        if not self.db.is_open:
+            closer.msg(f"{self.key} is already closed.")
+            return
+        self.db.is_open = False
+        closer.msg(f"You close {self.key}.")
+
+    def return_appearance(self, looker, **kwargs):
+        if not self.db.is_open:
+            return f"{self.key} — closed."
+        contents = [obj for obj in self.contents]
+        if not contents:
+            return f"{self.key} — open, empty."
+        names = "\n  ".join(obj.get_display_name(looker) for obj in contents)
+        return f"{self.key} — open:\n  {names}"
 
 
 class LoreDocument(Item):

@@ -258,8 +258,26 @@ class Character(ObjectParent, DefaultCharacter):
                  "You will wake — changed — at the beginning.|n")
         self.db.combat_target = None
         for s in self.scripts.all():
-            if s.key == "player_combat":
+            if s.key in ("player_combat", "rest_script"):
                 s.stop()
+
+        # Drop half gold in current room
+        gold = self.db.gold or 0
+        dropped = gold // 2
+        if dropped > 0 and self.location:
+            self.db.gold = gold - dropped
+            from typeclasses.items import Item
+            import evennia
+            pile = evennia.create_object(
+                Item, key=f"{self.name}'s coins", location=self.location
+            )
+            pile.db.item_type = "misc"
+            pile.db.value = dropped
+            pile.db.desc = f"A scattered pile of {dropped} gold coins."
+            self.location.msg_contents(
+                f"|y{self.name} drops {dropped} gold.|n"
+            )
+
         from evennia.utils import search
         from django.conf import settings
         start = None

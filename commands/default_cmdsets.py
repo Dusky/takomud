@@ -6,10 +6,13 @@ from evennia import default_cmds
 
 from commands.horror import (
     CmdStat, CmdLore, CmdAtmosphere, CmdSetLore, CmdSetDark,
-    CmdRead, CmdCharClass, CmdScore, CmdTrack, CmdMap,
+    CmdRead, CmdCharClass, CmdScore, CmdTrack, CmdMap, CmdSetEncounter,
 )
 from commands.combat import CmdAttack, CmdFlee, CmdConsider, CmdStop
-from commands.inventory import CmdInventory, CmdEquip, CmdUnequip, CmdUse, CmdDrop, CmdGive
+from commands.inventory import (
+    CmdInventory, CmdEquip, CmdUnequip, CmdUse, CmdDrop, CmdGive,
+    CmdRest, CmdInspect, CmdOpenContainer, CmdCloseContainer, CmdPutIn, CmdTakeFrom,
+)
 from commands.quest import CmdQuest, CmdTalk, CmdAbandon
 from commands.economy import CmdBrowse, CmdBuy, CmdSell
 from commands.admin import CmdGenerate, CmdGenerateStart, CmdGenerateQuest
@@ -28,6 +31,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdAtmosphere())
         self.add(CmdSetLore())
         self.add(CmdSetDark())
+        self.add(CmdSetEncounter())
         # Character / exploration
         self.add(CmdCharClass())
         self.add(CmdTrack())
@@ -44,6 +48,12 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         self.add(CmdUse())
         self.add(CmdDrop())
         self.add(CmdGive())
+        self.add(CmdInspect())
+        self.add(CmdRest())
+        self.add(CmdOpenContainer())
+        self.add(CmdCloseContainer())
+        self.add(CmdPutIn())
+        self.add(CmdTakeFrom())
         # Economy
         self.add(CmdBrowse())
         self.add(CmdBuy())

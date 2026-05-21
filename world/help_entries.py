@@ -417,4 +417,104 @@ Level thresholds: 100 / 250 / 500 / 900 / 1400 / 2000 / 3000 / 4500 / 6500 / 900
 Vagrants gain +2 XP per new room discovered.
         """,
     },
+    {
+        "key": "rest",
+        "aliases": ["sit", "sleep"],
+        "category": "Survival",
+        "text": """
+|wrest|n — Sit and recover HP and Sanity over time.
+
+Recovery rate: +5 HP and +3 Sanity every 10 seconds.
+Interrupted instantly if you enter combat.
+Stops automatically when fully recovered.
+
+You cannot rest in combat. Use |wstop|n first to disengage.
+
+Usage: rest
+        """,
+    },
+    {
+        "key": "inspect",
+        "aliases": ["examine", "ex"],
+        "category": "General",
+        "text": """
+|winspect <item>|n — Examine an item for full mechanical details.
+
+Shows item type, damage/defense values, effects, fuel level, and gold value.
+More informative than the standard look command.
+
+Usage: inspect rusted blade
+Usage: inspect tallow candle
+        """,
+    },
+    {
+        "key": "containers",
+        "aliases": ["container", "chest", "bag"],
+        "category": "General",
+        "text": """
+|wContainers|n — Chests, bags, and boxes that hold other items.
+
+Commands:
+  |wopen <container>|n           — Open a container to see its contents
+  |wclose <container>|n          — Close an open container
+  |wput <item> in <container>|n  — Place an item inside a container
+  |wtake <item> from <container>|n — Retrieve an item from a container
+
+Locked containers require a specific key item to open.
+Quest items cannot be placed in containers.
+        """,
+    },
+    {
+        "key": "random encounters",
+        "aliases": ["encounter", "encounters"],
+        "category": "World",
+        "text": """
+|wRandom Encounters|n — Certain rooms spawn transient creatures.
+
+Some rooms have an encounter_table — a list of possible creatures that
+can materialize while players are present. These creatures do not respawn
+and vanish after being killed or moving away.
+
+The chance of an encounter per tick is set per room (default 30%).
+Intervals are at minimum 2 minutes between potential spawns.
+        """,
+    },
+    {
+        "key": "death",
+        "category": "Mechanics",
+        "text": """
+|wDeath|n — What happens when your HP reaches 0.
+
+On death:
+  |r- Half your current gold drops in the room where you died.|n
+  |r- Sanity -10|n
+  |r- Fear +20|n
+  |r- HP restored to 50% of maximum|n
+  You are transported back to The Threshold (starting zone).
+
+The dropped gold can be picked up by anyone — including other players.
+
+Survivor class: once per hour, a killing blow leaves you at 1 HP instead.
+        """,
+    },
+    {
+        "key": "reputation gates",
+        "aliases": ["rep gate", "reputation requirement"],
+        "category": "World",
+        "text": """
+|wReputation Gates|n — Some NPCs require minimum faction standing.
+
+Certain NPCs will not speak with characters who have negative standing
+with their faction. They turn away with cold contempt instead of engaging.
+
+Build reputation by:
+  - Completing faction quests (+rep with faction)
+  - Killing enemy faction mobs (+2 rep with their rivals)
+
+Lose reputation by:
+  - Killing faction members (-5 rep with their faction)
+
+See |whelp factions|n for faction relationships.
+        """,
+    },
 ]

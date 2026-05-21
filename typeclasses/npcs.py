@@ -59,6 +59,7 @@ class NPC(ObjectParent, DefaultCharacter):
         self.db.xp_reward = 0
         self.db.loot_table = []        # list of {prototype_key, chance (0-1)}
         self.db.combat_target = None
+        self.db.min_reputation = None  # int or None; speaker must meet this rep with faction
         # Stop NPCs being puppeted
         self.locks.add("puppet:false()")
 
@@ -70,6 +71,15 @@ class NPC(ObjectParent, DefaultCharacter):
 
     def at_talked_to(self, speaker, topic=None):
         """Called by CmdTalk. Returns dialogue string."""
+        min_rep = self.db.min_reputation
+        if min_rep is not None:
+            faction = self.db.faction or "neutral"
+            rep = (speaker.db.reputation or {}).get(faction, 0)
+            if rep < min_rep:
+                return (
+                    f"They look at you with cold contempt and turn away. "
+                    f"(Requires {faction} reputation ≥ {min_rep}; yours: {rep})"
+                )
         dlg = self.db.dialogue or {}
         if topic:
             resp = dlg.get("topics", {}).get(topic.lower())
