@@ -92,3 +92,31 @@ class Item(ObjectParent, DefaultObject):
         elif t == "light":
             name = f"|Y{name}|n" if self.db.lit else f"|x{name}|n"
         return name
+
+
+class LoreDocument(Item):
+    """A readable document: book, journal, inscription, note, letter."""
+
+    def at_object_creation(self):
+        super().at_object_creation()
+        self.db.item_type = "misc"
+        self.db.readable = True
+        self.db.doc_text = ""
+        self.db.doc_title = self.key
+        self.db.sanity_cost = 2
+
+    def get_display_name(self, looker, **kwargs):
+        return f"|m{self.key}|n"
+
+    def at_read(self, reader):
+        if not self.db.doc_text:
+            reader.msg("|xThe pages are blank — or perhaps you simply cannot read them.|n")
+            return
+        reader.msg(
+            f"\n|w=== {self.db.doc_title} ===|n\n\n"
+            f"{self.db.doc_text}\n\n"
+            f"|x(You set it down. The words do not leave you.)|n"
+        )
+        cost = self.db.sanity_cost or 0
+        if cost and hasattr(reader, "adjust_sanity"):
+            reader.adjust_sanity(-cost)

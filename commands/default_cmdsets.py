@@ -4,10 +4,11 @@ Command sets for Takomud.
 
 from evennia import default_cmds
 
-from commands.horror import CmdStat, CmdLore, CmdAtmosphere, CmdSetLore, CmdSetDark
+from commands.horror import CmdStat, CmdLore, CmdAtmosphere, CmdSetLore, CmdSetDark, CmdRead, CmdCharClass
 from commands.combat import CmdAttack, CmdFlee, CmdConsider
 from commands.inventory import CmdInventory, CmdEquip, CmdUnequip, CmdUse, CmdDrop
 from commands.quest import CmdQuest, CmdTalk
+from commands.admin import CmdGenerate, CmdGenerateStart
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -34,6 +35,9 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         # Quests / dialogue
         self.add(CmdQuest())
         self.add(CmdTalk())
+        # Reading and character setup
+        self.add(CmdRead())
+        self.add(CmdCharClass())
 
 
 class AccountCmdSet(default_cmds.AccountCmdSet):
@@ -41,6 +45,8 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
 
     def at_cmdset_creation(self):
         super().at_cmdset_creation()
+        self.add(CmdGenerate())
+        self.add(CmdGenerateStart())
 
 
 class UnloggedinCmdSet(default_cmds.UnloggedinCmdSet):

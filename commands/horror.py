@@ -195,3 +195,69 @@ class CmdSetDark(BaseCommand):
 
         state = "dark" if room.db.dark else "lit"
         self.caller.msg(f"Room is now |w{state}|n.")
+
+
+class CmdRead(BaseCommand):
+    """
+    Read a document, book, inscription, or letter.
+
+    Usage:
+      read <object>
+
+    Some written things cost sanity to read.
+    """
+
+    key = "read"
+    help_category = "General"
+
+    def func(self):
+        if not self.args:
+            self.caller.msg("Read what?")
+            return
+        obj = self.caller.search(self.args.strip())
+        if not obj:
+            return
+        if not getattr(obj.db, "readable", False):
+            self.caller.msg("You cannot read that.")
+            return
+        obj.at_read(self.caller)
+
+
+class CmdCharClass(BaseCommand):
+    """
+    Choose your character class at the start of your descent.
+
+    Usage:
+      class              — show available classes
+      class <name>       — select a class (one time only)
+
+    Once chosen, your class cannot be changed.
+    """
+
+    key = "class"
+    aliases = ["charclass"]
+    help_category = "General"
+
+    def func(self):
+        from world.world_bible import CHARACTER_CLASSES
+        if not self.args:
+            self.caller._prompt_class_selection()
+            return
+        class_key = self.args.strip().lower()
+        if self.caller.db.char_class:
+            self.caller.msg(
+                f"|yYou are already {self.caller.db.char_class}. "
+                f"You cannot change what you already are.|n"
+            )
+            return
+        if class_key not in CHARACTER_CLASSES:
+            valid = ", ".join(CHARACTER_CLASSES.keys())
+            self.caller.msg(f"|rUnknown class.|n Choose from: {valid}")
+            return
+        self.caller.apply_class(class_key)
+        cls = CHARACTER_CLASSES[class_key]
+        self.caller.msg(
+            f"\n|wYou are {cls['name']}.|n\n"
+            f"{cls['desc']}\n\n"
+            f"|xSpecial: {cls['special']}|n\n"
+        )

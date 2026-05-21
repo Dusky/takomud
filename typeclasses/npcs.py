@@ -182,6 +182,46 @@ class Mob(NPC):
             target.msg(f"|y{self.key} swings at you and misses.|n")
 
 
+class Boss(Mob):
+    """Named boss mob with combat phases and unique display."""
+
+    def at_object_creation(self):
+        super().at_object_creation()
+        self.db.is_boss = True
+        self.db.phases = []          # [{hp_threshold (0-1), message, damage_bonus}]
+        self.db.phase_triggered = [] # list of triggered phase indices
+
+    def get_display_name(self, looker, **kwargs):
+        return f"|R|u{self.key}|n"
+
+    def take_damage(self, amount, attacker=None):
+        hp = super().take_damage(amount, attacker)
+        if hp > 0:
+            self._check_phases(hp)
+        return hp
+
+    def _check_phases(self, current_hp):
+        phases = self.db.phases or []
+        hp_pct = current_hp / (self.db.hp_max or 1)
+        triggered = list(self.db.phase_triggered or [])
+        for i, phase in enumerate(phases):
+            if i in triggered:
+                continue
+            if hp_pct <= phase.get("hp_threshold", 0):
+                triggered.append(i)
+                self.db.phase_triggered = triggered
+                msg = phase.get("message", "")
+                if msg and self.location:
+                    self.location.msg_contents(f"|R{self.key}: {msg}|n")
+                bonus = phase.get("damage_bonus", 0)
+                if bonus:
+                    try:
+                        count, sides = (self.db.damage_dice or "1d6").lower().split("d")
+                        self.db.damage_dice = f"{count}d{int(sides) + bonus}"
+                    except Exception:
+                        pass
+
+
 def _roll_dice(dice_str):
     """Roll XdY and return total. Accepts '2d6', '1d4', etc."""
     import random as _r

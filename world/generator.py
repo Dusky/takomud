@@ -131,7 +131,12 @@ AREA_TOOL = {
                                 "topics":   {"type": "object", "additionalProperties": {"type": "string"}}
                             }
                         },
-                        "quest_keys": {"type": "array", "items": {"type": "string"}}
+                        "quest_keys": {"type": "array", "items": {"type": "string"}},
+                        "shop_items": {
+                            "type": "array",
+                            "description": "prototype_keys of items this NPC sells (merchant NPCs only)",
+                            "items": {"type": "string"}
+                        }
                     }
                 }
             },
@@ -218,10 +223,210 @@ AREA_TOOL = {
                         }
                     }
                 }
+            },
+            "lore_documents": {
+                "type": "array",
+                "description": "Readable books, journals, notes, inscriptions placed in rooms.",
+                "items": {
+                    "type": "object",
+                    "required": ["key", "title", "text", "room_key"],
+                    "properties": {
+                        "key":         {"type": "string"},
+                        "title":       {"type": "string"},
+                        "text":        {"type": "string", "minLength": 80},
+                        "room_key":    {"type": "string"},
+                        "sanity_cost": {"type": "integer", "minimum": 0, "maximum": 15}
+                    }
+                }
+            },
+            "boss_encounters": {
+                "type": "array",
+                "maxItems": 1,
+                "description": "One optional named boss for this area.",
+                "items": {
+                    "type": "object",
+                    "required": ["key", "room_key", "desc", "hp", "damage_dice", "xp_reward", "phases"],
+                    "properties": {
+                        "key":          {"type": "string"},
+                        "room_key":     {"type": "string"},
+                        "desc":         {"type": "string"},
+                        "hp":           {"type": "integer", "minimum": 80},
+                        "attack_bonus": {"type": "integer"},
+                        "defense":      {"type": "integer"},
+                        "damage_dice":  {"type": "string"},
+                        "xp_reward":    {"type": "integer"},
+                        "phases": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "hp_threshold": {"type": "number", "minimum": 0, "maximum": 1},
+                                    "message":      {"type": "string"},
+                                    "damage_bonus": {"type": "integer"}
+                                }
+                            }
+                        },
+                        "loot_table": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "prototype_key": {"type": "string"},
+                                    "chance":        {"type": "number", "minimum": 0, "maximum": 1}
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "world_events": {
+                "type": "array",
+                "description": "Recurring timed events fired into specific rooms.",
+                "items": {
+                    "type": "object",
+                    "required": ["key", "message", "interval_seconds", "room_keys"],
+                    "properties": {
+                        "key":              {"type": "string"},
+                        "message":          {"type": "string"},
+                        "interval_seconds": {"type": "integer", "minimum": 120},
+                        "room_keys":        {"type": "array", "items": {"type": "string"}},
+                        "sanity_cost":      {"type": "integer", "minimum": 0, "maximum": 10},
+                        "fear_cost":        {"type": "integer", "minimum": 0, "maximum": 20}
+                    }
+                }
             }
         }
     }
 }
+
+
+STARTING_ZONE_TOOL = {
+    "name": "create_starting_zone",
+    "description": "Create the Threshold — the liminal starting zone where all players begin.",
+    "input_schema": {
+        "type": "object",
+        "required": ["rooms", "npcs", "items", "lore_documents"],
+        "properties": {
+            "rooms": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 5,
+                "items": {
+                    "type": "object",
+                    "required": ["key", "desc", "exits", "is_start"],
+                    "properties": {
+                        "key":        {"type": "string"},
+                        "desc":       {"type": "string", "minLength": 100},
+                        "is_start":   {"type": "boolean", "description": "Exactly one room must be true — the spawn point"},
+                        "atmosphere": {"type": "array", "items": {"type": "string"}},
+                        "lore":       {"type": "string"},
+                        "exits":      {"type": "object", "additionalProperties": {"type": "string"}}
+                    }
+                }
+            },
+            "npcs": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["key", "room_key", "desc", "dialogue"],
+                    "properties": {
+                        "key":      {"type": "string"},
+                        "room_key": {"type": "string"},
+                        "desc":     {"type": "string"},
+                        "faction":  {"type": "string"},
+                        "dialogue": {
+                            "type": "object",
+                            "properties": {
+                                "greeting": {"type": "string"},
+                                "topics":   {"type": "object", "additionalProperties": {"type": "string"}}
+                            }
+                        }
+                    }
+                }
+            },
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["key", "desc", "item_type", "room_key"],
+                    "properties": {
+                        "key":             {"type": "string"},
+                        "prototype_key":   {"type": "string"},
+                        "desc":            {"type": "string"},
+                        "item_type":       {"type": "string", "enum": ["weapon","armor","consumable","light","misc"]},
+                        "room_key":        {"type": "string"},
+                        "damage_dice":     {"type": "string"},
+                        "attack_bonus":    {"type": "integer"},
+                        "defense_bonus":   {"type": "integer"},
+                        "effect":          {"type": "object"},
+                        "is_light_source": {"type": "boolean"},
+                        "fuel":            {"type": ["integer","null"]},
+                        "value":           {"type": "integer"}
+                    }
+                }
+            },
+            "lore_documents": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "required": ["key", "title", "text", "room_key"],
+                    "properties": {
+                        "key":         {"type": "string"},
+                        "title":       {"type": "string"},
+                        "text":        {"type": "string", "minLength": 80},
+                        "room_key":    {"type": "string"},
+                        "sanity_cost": {"type": "integer", "minimum": 0, "maximum": 5}
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+def generate_starting_zone(api_key=None):
+    """
+    Generate The Threshold starting zone via the Claude API.
+    Returns raw zone_data dict, or None if no API key is available.
+    """
+    import anthropic
+    from world.world_bible import GENERATION_PROMPT_SYSTEM
+
+    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        log.warning("ANTHROPIC_API_KEY not set — skipping starting zone generation.")
+        return None
+
+    user_prompt = """Generate the starting zone for Takomud: "The Threshold".
+
+This is where all players spawn. It is a liminal border — not quite the real world, not yet the deep horror.
+
+Requirements:
+- 3-5 rooms. Exactly one must have is_start: true. Name that room "The Threshold".
+- The spawn room is an ambiguous, quiet border-place. Dread is present but subdued.
+- 1-2 NPCs who can orient new arrivals (never cheerful; horror tone always; faction: remnants or scholars).
+- 4-6 starter items: a light source, a simple weapon, at least one consumable.
+- 2-3 lore documents hinting at the world's history (sanity_cost 0-2).
+- Exits from edge rooms can reference stub names like "The Sunken City Gate" or "The Pale Forest Edge"
+  (these rooms don't exist yet and won't be created — they are future connection points).
+- Atmosphere: psychological dread, liminal unease, something has already gone wrong here.
+"""
+
+    client = anthropic.Anthropic(api_key=key)
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=6000,
+        system=GENERATION_PROMPT_SYSTEM,
+        tools=[STARTING_ZONE_TOOL],
+        tool_choice={"type": "tool", "name": "create_starting_zone"},
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "create_starting_zone":
+            return block.input
+
+    raise ValueError("No tool_use block in Claude response for starting zone")
 
 
 def _call_claude(prompt, api_key, existing_room_keys, region_name, region_theme, horror_style):
@@ -242,16 +447,19 @@ Horror style: {horror_style}
 Requirements:
 - 4-6 rooms with rich, sensory descriptions (100+ words each)
 - At least one room connected via exit to an existing room (if any exist)
-- 1-3 NPCs (non-hostile, faction-aligned, with dialogue and at least 3 conversation topics)
+- 1-3 NPCs (non-hostile, faction-aligned; include dialogue with at least 3 topics; merchant NPCs may have shop_items)
 - 2-4 mobs (hostile creatures appropriate to the theme)
-- 4-8 items (mix of weapons, armor, consumables, light sources; place in rooms or on mob loot tables)
+- 0-1 boss encounter (a named, dangerous creature with 2-3 combat phases; optional but strongly encouraged)
+- 4-8 items (mix of weapons, armor, consumables, light sources; place in rooms or on mob/boss loot tables)
+- 1-2 lore_documents (readable books, journals, or inscriptions; 80+ words of in-world prose each)
 - 1-2 quests given by NPCs (multi-stage, thematically integrated)
+- 0-2 world_events (recurring timed messages sent to players in rooms; 120+ second intervals)
 - Every mob loot_table entry must reference a prototype_key from the items list
 - Rooms must interconnect to form a navigable layout — every room reachable from another
 
 All prose must match the horror style: {horror_style}
 All factions must be from: {', '.join(FACTIONS.keys())}
-Use the generate_content tool to return results.
+Use the create_area tool to return results.
 """
 
     client = anthropic.Anthropic(api_key=api_key)
@@ -431,6 +639,7 @@ def _apply_area(area_data, state):
         npc.db.faction = npc_data.get("faction", "neutral")
         npc.db.dialogue = npc_data.get("dialogue", {})
         npc.db.quest_keys = npc_data.get("quest_keys", [])
+        npc.db.shop = npc_data.get("shop_items", [])
         state["all_npcs"][key] = npc.dbref
         created_npcs[key] = npc
         log.info(f"  + NPC: {key} in {npc_data.get('room_key')} (#{npc.id})")
@@ -481,7 +690,72 @@ def _apply_area(area_data, state):
         log.info(f"  + Quest: {quest_data['title']} (given by {giver_key})")
 
     # ----------------------------------------------------------------
-    # 8. Record area
+    # 8. Create lore documents
+    # ----------------------------------------------------------------
+    from typeclasses.items import LoreDocument
+
+    for doc_data in area_data.get("lore_documents", []):
+        room = _get_room(doc_data.get("room_key", ""))
+        if not room:
+            log.warning(f"  Lore doc room not found: {doc_data.get('room_key')}")
+            continue
+        doc = evennia.create_object(LoreDocument, key=doc_data["key"], location=room)
+        doc.db.doc_title = doc_data.get("title", doc_data["key"])
+        doc.db.doc_text = doc_data.get("text", "")
+        doc.db.sanity_cost = doc_data.get("sanity_cost", 2)
+        log.info(f"  + LoreDoc: {doc_data['key']} in {doc_data.get('room_key')}")
+
+    # ----------------------------------------------------------------
+    # 9. Create boss encounters
+    # ----------------------------------------------------------------
+    from typeclasses.npcs import Boss
+
+    for boss_data in area_data.get("boss_encounters", []):
+        key = boss_data["key"]
+        room = _get_room(boss_data.get("room_key", ""))
+        if not room:
+            log.warning(f"  Boss room not found: {boss_data.get('room_key')}")
+            continue
+        boss = evennia.create_object(Boss, key=key, location=room)
+        boss.db.desc = boss_data.get("desc", "")
+        boss.db.hp = boss_data.get("hp", 100)
+        boss.db.hp_max = boss.db.hp
+        boss.db.attack_bonus = boss_data.get("attack_bonus", 5)
+        boss.db.defense = boss_data.get("defense", 12)
+        boss.db.damage_dice = boss_data.get("damage_dice", "2d8")
+        boss.db.xp_reward = boss_data.get("xp_reward", 200)
+        boss.db.aggro = True
+        boss.db.phases = boss_data.get("phases", [])
+        boss.db.phase_triggered = []
+        boss.db.loot_table = boss_data.get("loot_table", [])
+        state["all_npcs"][key] = boss.dbref
+        log.info(f"  + Boss: {key} in {boss_data.get('room_key')} (#{boss.id})")
+
+    # ----------------------------------------------------------------
+    # 10. Create world events
+    # ----------------------------------------------------------------
+    from typeclasses.scripts import WorldEventScript
+
+    for event_data in area_data.get("world_events", []):
+        room_dbrefs = []
+        for rk in event_data.get("room_keys", []):
+            r = _get_room(rk)
+            if r:
+                room_dbrefs.append(r.dbref)
+        if not room_dbrefs:
+            log.warning(f"  World event '{event_data['key']}' has no valid rooms; skipping.")
+            continue
+        script = evennia.create_script(WorldEventScript, key=event_data["key"])
+        script.db.message = event_data.get("message", "")
+        script.db.room_dbrefs = room_dbrefs
+        script.db.sanity_cost = event_data.get("sanity_cost", 0)
+        script.db.fear_cost = event_data.get("fear_cost", 0)
+        script.interval = event_data.get("interval_seconds", 300)
+        script.start()
+        log.info(f"  + WorldEvent: {event_data['key']} ({script.interval}s)")
+
+    # ----------------------------------------------------------------
+    # 11. Record area
     # ----------------------------------------------------------------
     area_record = {
         "name": area_data.get("area_name", "Unknown"),

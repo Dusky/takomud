@@ -127,6 +127,25 @@ class Character(ObjectParent, DefaultCharacter):
     # Display
     # ------------------------------------------------------------------
 
+    def at_post_login(self, account=None, session=None, **kwargs):
+        super().at_post_login(account=account, session=session, **kwargs)
+        if not self.db.char_class:
+            self._prompt_class_selection()
+
+    def _prompt_class_selection(self):
+        from world.world_bible import CHARACTER_CLASSES
+        lines = [
+            "",
+            "|wYou are no one yet. Choose what you are — you cannot change it later.|n",
+            "",
+        ]
+        for key, cls in CHARACTER_CLASSES.items():
+            lines.append(f"  |w{key:<10}|n {cls['desc']}")
+            lines.append(f"             |xSpecial: {cls['special']}|n")
+            lines.append("")
+        lines.append("|yType |wclass <name>|y to begin.|n")
+        self.msg("\n".join(lines))
+
     def get_display_name(self, looker, **kwargs):
         name = super().get_display_name(looker, **kwargs)
         fear = self.db.fear or 0
