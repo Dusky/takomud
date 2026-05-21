@@ -208,9 +208,23 @@ AREA_TOOL = {
                             "minItems": 1,
                             "items": {
                                 "type": "object",
+                                "required": ["text", "objective"],
                                 "properties": {
-                                    "text":      {"type": "string"},
-                                    "objective": {"type": "string"}
+                                    "text": {"type": "string"},
+                                    "objective": {
+                                        "description": "Structured objective dict.",
+                                        "type": "object",
+                                        "required": ["type"],
+                                        "properties": {
+                                            "type":    {"type": "string", "enum": ["kill","collect","visit","talk","deliver"]},
+                                            "target":  {"type": "string", "description": "mob name/key (kill)"},
+                                            "count":   {"type": "integer", "minimum": 1, "description": "required kills"},
+                                            "current": {"type": "integer", "default": 0},
+                                            "item":    {"type": "string", "description": "item name (collect/deliver)"},
+                                            "room":    {"type": "string", "description": "room name/key (visit)"},
+                                            "npc":     {"type": "string", "description": "npc name/key (talk/deliver)"}
+                                        }
+                                    }
                                 }
                             }
                         },
@@ -218,7 +232,13 @@ AREA_TOOL = {
                             "type": "object",
                             "properties": {
                                 "xp":    {"type": "integer"},
-                                "items": {"type": "array", "items": {"type": "string"}}
+                                "gold":  {"type": "integer"},
+                                "items": {"type": "array", "items": {"type": "string"}},
+                                "reputation": {
+                                    "type": "object",
+                                    "description": "faction -> reputation change",
+                                    "additionalProperties": {"type": "integer"}
+                                }
                             }
                         }
                     }
@@ -429,6 +449,234 @@ Requirements:
     raise ValueError("No tool_use block in Claude response for starting zone")
 
 
+MAIN_QUESTLINE_TOOL = {
+    "name": "create_main_questline",
+    "description": "Create the overarching meta-narrative questline that connects all world regions.",
+    "input_schema": {
+        "type": "object",
+        "required": ["title", "premise", "herald_npc", "stages"],
+        "properties": {
+            "title": {"type": "string"},
+            "premise": {"type": "string", "description": "2-3 sentences: what happened, what the player must do"},
+            "herald_npc": {
+                "type": "object",
+                "description": "NPC placed in The Threshold who gives the main quest.",
+                "required": ["key", "desc", "dialogue"],
+                "properties": {
+                    "key":      {"type": "string"},
+                    "faction":  {"type": "string"},
+                    "desc":     {"type": "string"},
+                    "dialogue": {
+                        "type": "object",
+                        "properties": {
+                            "greeting": {"type": "string"},
+                            "topics":   {"type": "object", "additionalProperties": {"type": "string"}}
+                        }
+                    }
+                }
+            },
+            "stages": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 7,
+                "items": {
+                    "type": "object",
+                    "required": ["title", "text", "region", "objective"],
+                    "properties": {
+                        "title":   {"type": "string"},
+                        "text":    {"type": "string"},
+                        "region":  {"type": "string", "description": "Which region this stage sends the player to"},
+                        "objective": {
+                            "type": "object",
+                            "required": ["type"],
+                            "properties": {
+                                "type":    {"type": "string", "enum": ["kill","collect","visit","talk","deliver"]},
+                                "target":  {"type": "string"},
+                                "count":   {"type": "integer", "minimum": 1},
+                                "current": {"type": "integer", "default": 0},
+                                "item":    {"type": "string"},
+                                "room":    {"type": "string"},
+                                "npc":     {"type": "string"}
+                            }
+                        },
+                        "reward": {
+                            "type": "object",
+                            "properties": {
+                                "xp":   {"type": "integer"},
+                                "gold": {"type": "integer"},
+                                "reputation": {"type": "object", "additionalProperties": {"type": "integer"}}
+                            }
+                        }
+                    }
+                }
+            },
+            "conclusion": {"type": "string", "description": "What completing the questline reveals or resolves"}
+        }
+    }
+}
+
+
+def generate_main_questline(api_key=None, existing_areas=None):
+    """
+    Generate the overarching meta-narrative questline via Claude.
+    Returns questline data dict, or None on failure.
+    """
+    import anthropic
+    from world.world_bible import GENERATION_PROMPT_SYSTEM, REGIONS
+
+    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        return None
+
+    area_summary = ""
+    if existing_areas:
+        area_summary = "Existing areas: " + ", ".join(
+            f"{a['name']} ({a['theme']})" for a in existing_areas[:6]
+        )
+
+    region_names = ", ".join(r["name"] for r in REGIONS)
+
+    user_prompt = f"""Create the main questline for Takomud — the overarching meta-narrative that ties the world together.
+
+World regions: {region_names}
+{area_summary}
+
+Requirements:
+- 4-7 stages, one per major region, sending the player progressively deeper into the horror
+- A herald NPC in The Threshold who gives the quest and frames the mystery
+- Each stage uses a structured objective (kill a named boss, visit a specific room, talk to a key NPC, deliver an artifact)
+- Reward each stage with XP, gold, and faction reputation (faction should match the stage's region theme)
+- The conclusion should reveal something about the world-breaking event — not resolve it, but reframe it
+- Tone: psychological horror, slowly escalating dread, revelation is worse than ignorance
+- The questline must feel like it was authored, not generated — give it a through-line
+"""
+
+    client = anthropic.Anthropic(api_key=key)
+    response = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=6000,
+        system=GENERATION_PROMPT_SYSTEM,
+        tools=[MAIN_QUESTLINE_TOOL],
+        tool_choice={"type": "tool", "name": "create_main_questline"},
+        messages=[{"role": "user", "content": user_prompt}],
+    )
+
+    for block in response.content:
+        if block.type == "tool_use" and block.name == "create_main_questline":
+            return block.input
+
+    log.error("No tool_use block in Claude response for main questline")
+    return None
+
+
+def _apply_main_questline(questline_data, state):
+    """Place the herald NPC in The Threshold and register the main questline."""
+    import evennia
+    from typeclasses.npcs import NPC
+    from typeclasses.rooms import Room
+    from world import quest_registry
+
+    herald = questline_data.get("herald_npc", {})
+    if not herald:
+        return
+
+    # Find The Threshold spawn room
+    threshold_key = "The Threshold"
+    results = evennia.search_object(threshold_key, typeclass=Room)
+    if not results:
+        log.warning("Cannot place herald: The Threshold room not found.")
+        return
+
+    room = results[0]
+    npc = evennia.create_object(NPC, key=herald["key"], location=room)
+    npc.db.desc = herald.get("desc", "")
+    npc.db.faction = herald.get("faction", "remnants")
+    npc.db.dialogue = herald.get("dialogue", {})
+
+    # Build quest data from the questline
+    quest_data = {
+        "key": "main_questline",
+        "title": questline_data.get("title", "The Weight of What Remains"),
+        "desc": questline_data.get("premise", ""),
+        "giver_npc_key": herald["key"],
+        "stages": [
+            {"text": s["text"], "objective": s["objective"]}
+            for s in questline_data.get("stages", [])
+        ],
+        "reward": {"xp": 500, "gold": 100},
+    }
+    quest_registry.register(quest_data)
+    npc.db.quest_keys = ["main_questline"]
+    state["all_npcs"][herald["key"]] = npc.dbref
+    log.info(f"  + Main questline herald: {herald['key']} in The Threshold")
+
+
+# ---------------------------------------------------------------------------
+# Two-stage review pipeline
+# ---------------------------------------------------------------------------
+
+_QUALITY_SYSTEM = """You are a quality editor for Takomud, a dark horror MUD.
+
+Review the generated area data and return a corrected version via the same create_area tool.
+Fix:
+- Descriptions shorter than 80 words (expand them with sensory detail)
+- Generic or clichéd horror tropes (replace: no dripping blood, no cobwebs, no skeletons)
+- NPCs with fewer than 3 dialogue topics (add more)
+- Items with value=0 that should have prices (estimate based on item type and power)
+- Any faction name not in: remnants, hollow, scholars, wardens, unspoken, neutral
+- Quest objectives that are vague strings (convert to structured dict format)
+- Missing prototype_key on items (generate a snake_case key from the item name)
+Return the corrected data using the create_area tool."""
+
+_CONSISTENCY_SYSTEM = """You are a world consistency editor for Takomud, a dark horror MUD.
+
+You receive area data and context about the existing world. Return corrected data via create_area.
+Check:
+- Exit connections: if an exit target is not in the new area's rooms, is it in existing_rooms?
+  If not, remove or replace it with a room that does exist.
+- Faction logic: Hollow and Wardens are enemies. Scholars are neutral. Unspoken are unknowable.
+  NPCs of enemy factions should not be in the same room unless there's clear tension.
+- Horror tone consistency: prose must match the area's declared horror_style.
+  Psychological = implication. Eldritch = wrongness of scale. Folk = old rules.
+  Gothic = decay. Cosmic = indifference. Body = unreliable self.
+- Lore consistency: generated lore should not contradict established world facts.
+Return the corrected data using the create_area tool."""
+
+
+def _review_area(area_data, api_key, existing_room_keys, stage="quality"):
+    """Run one review pass over area_data. Returns (possibly corrected) area_data."""
+    import anthropic
+    system = _QUALITY_SYSTEM if stage == "quality" else _CONSISTENCY_SYSTEM
+
+    context = ""
+    if stage == "consistency" and existing_room_keys:
+        context = f"\nExisting world rooms (valid exit targets): {', '.join(existing_room_keys[-20:])}"
+
+    user_msg = (
+        f"Review and correct this generated area data.{context}\n\n"
+        f"Area data:\n{json.dumps(area_data, indent=2)}"
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=8000,
+            system=system,
+            tools=[AREA_TOOL],
+            tool_choice={"type": "tool", "name": "create_area"},
+            messages=[{"role": "user", "content": user_msg}],
+        )
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "create_area":
+                log.info(f"  [{stage} review] Applied corrections.")
+                return block.input
+    except Exception as e:
+        log.warning(f"  [{stage} review] Failed, using original: {e}")
+
+    return area_data
+
+
 def _call_claude(prompt, api_key, existing_room_keys, region_name, region_theme, horror_style):
     import anthropic
     from world.world_bible import GENERATION_PROMPT_SYSTEM, FACTIONS
@@ -452,9 +700,10 @@ Requirements:
 - 0-1 boss encounter (a named, dangerous creature with 2-3 combat phases; optional but strongly encouraged)
 - 4-8 items (mix of weapons, armor, consumables, light sources; place in rooms or on mob/boss loot tables)
 - 1-2 lore_documents (readable books, journals, or inscriptions; 80+ words of in-world prose each)
-- 1-2 quests given by NPCs (multi-stage, thematically integrated)
+- 1-2 quests given by NPCs (multi-stage, thematically integrated; use structured objective dicts)
 - 0-2 world_events (recurring timed messages sent to players in rooms; 120+ second intervals)
 - Every mob loot_table entry must reference a prototype_key from the items list
+- Quest reward should include gold (10-100) and reputation changes for relevant factions
 - Rooms must interconnect to form a navigable layout — every room reachable from another
 
 All prose must match the horror style: {horror_style}
@@ -474,7 +723,13 @@ Use the create_area tool to return results.
 
     for block in response.content:
         if block.type == "tool_use" and block.name == "create_area":
-            return block.input
+            raw = block.input
+            log.info("  [generation] Raw area received. Running quality review...")
+            reviewed = _review_area(raw, api_key, existing_room_keys, stage="quality")
+            log.info("  [quality] Done. Running consistency review...")
+            final = _review_area(reviewed, api_key, existing_room_keys, stage="consistency")
+            log.info("  [consistency] Done.")
+            return final
 
     raise ValueError("No tool_use block in Claude response")
 
@@ -803,16 +1058,29 @@ def generate(cycles=1, delay=10, api_key=None):
     state = _load_state()
     existing_rooms = list(state["all_rooms"].keys())
 
+    # Generate main questline on the first run if not already created
+    if not state.get("main_questline_created"):
+        log.info("=== Generating main questline ===")
+        try:
+            ql_data = generate_main_questline(api_key=key, existing_areas=state.get("areas", []))
+            if ql_data:
+                _apply_main_questline(ql_data, state)
+                state["main_questline_created"] = True
+                _save_state(state)
+                log.info(f"=== Main questline created: {ql_data.get('title')} ===")
+        except Exception as e:
+            log.error(f"Main questline generation failed: {e}", exc_info=True)
+
     i = 0
     while cycles == 0 or i < cycles:
         region = _pick_next_region(state)
-        log.info(f"=== Generating area {i+1}: {region['name']} ===")
+        log.info(f"=== Generating area {i+1}: {region['name']} (+ quality & consistency review) ===")
 
         try:
             area_data = _call_claude(
                 prompt=None,
                 api_key=key,
-                existing_room_keys=existing_rooms[-10:],  # last 10 to avoid huge prompts
+                existing_room_keys=existing_rooms[-15:],
                 region_name=region["name"],
                 region_theme=region.get("theme", ""),
                 horror_style=region.get("horror_type", "psychological"),

@@ -7,14 +7,6 @@ from evennia.commands.command import Command as BaseCommand
 from evennia.utils import utils
 
 
-def _roll_dice(dice_str):
-    try:
-        count, sides = dice_str.lower().split("d")
-        return sum(random.randint(1, int(sides)) for _ in range(int(count)))
-    except Exception:
-        return 1
-
-
 class CmdAttack(BaseCommand):
     """
     Attack a target in the room.
@@ -23,8 +15,8 @@ class CmdAttack(BaseCommand):
       attack <target>
       kill <target>
 
-    Initiates combat. You and the target exchange blows each round.
-    Use |wflee|n to attempt escape.
+    Starts continuous combat — you auto-attack every 4 seconds.
+    Use |wstop|n or |wflee|n to disengage.
     """
 
     key = "attack"
@@ -48,48 +40,66 @@ class CmdAttack(BaseCommand):
             self.caller.msg("You cannot attack that.")
             return
 
-        # Resolve one player attack round
-        caller = self.caller
-        weapon = _get_equipped_weapon(caller)
-        dice = weapon.db.damage_dice if weapon else "1d4"
-        atk_bonus = (caller.db.attack_bonus or 0) + (weapon.db.attack_bonus if weapon else 0)
-        defense = target.db.defense or 10
+        if self.caller.db.combat_target == target:
+            self.caller.msg(f"You are already fighting {target.key}.")
+            return
 
-        roll = random.randint(1, 20) + atk_bonus
-        if roll >= defense:
-            dmg = _roll_dice(dice)
-            caller.msg(f"|wYou strike {target.key} for {dmg} damage.|n")
-            caller.location.msg_contents(
-                f"|w{caller.name} strikes {target.key} for {dmg} damage.|n",
-                exclude=[caller]
-            )
-            target.take_damage(dmg, attacker=caller)
-            from world.quest_system import check_objective
-            check_objective(caller, "kill", target.key)
-        else:
-            caller.msg(f"|yYou swing at {target.key} and miss.|n")
-            caller.location.msg_contents(
-                f"|y{caller.name} swings at {target.key} and misses.|n",
-                exclude=[caller]
-            )
+        self.caller.db.combat_target = target
+        self.caller.msg(f"|rYou engage {target.key}.|n")
+        self.caller.location.msg_contents(
+            f"|r{self.caller.name} attacks {target.key}!|n",
+            exclude=[self.caller],
+        )
 
-        # Trigger mob retaliation if mob is still alive
-        if target.pk and utils.inherits_from(target, "typeclasses.npcs.Mob"):
-            if not target.db.combat_target:
-                target.db.combat_target = caller
-                from typeclasses.npcs import CombatScript
-                if not target.scripts.get("combat_script"):
-                    target.scripts.add(CombatScript)
+        # Start auto-attack loop
+        from typeclasses.scripts import PlayerCombatScript, _execute_player_attack
+        if not self.caller.scripts.get("player_combat"):
+            self.caller.scripts.add(PlayerCombatScript)
+
+        # Immediate first strike
+        _execute_player_attack(self.caller, target)
+
+        # Wake mob's retaliation
+        if utils.inherits_from(target, "typeclasses.npcs.Mob") and not target.db.combat_target:
+            target.db.combat_target = self.caller
+            from typeclasses.npcs import CombatScript
+            if not target.scripts.get("combat_script"):
+                target.scripts.add(CombatScript)
+
+
+class CmdStop(BaseCommand):
+    """
+    Stop fighting and disengage from combat.
+
+    Usage:
+      stop
+
+    Clears your combat target. The enemy may still be hostile.
+    """
+
+    key = "stop"
+    aliases = ["disengage", "stand"]
+    help_category = "Combat"
+
+    def func(self):
+        if not self.caller.db.combat_target:
+            self.caller.msg("You are not in combat.")
+            return
+        self.caller.db.combat_target = None
+        for s in self.caller.scripts.all():
+            if s.key == "player_combat":
+                s.stop()
+        self.caller.msg("|yYou disengage.|n")
 
 
 class CmdFlee(BaseCommand):
     """
-    Attempt to flee combat through a random exit.
+    Flee combat through a random exit.
 
     Usage:
       flee
 
-    Sanity cost: 5. May fail if you are cornered.
+    Sanity cost: 5. Fails if cornered.
     """
 
     key = "flee"
@@ -102,6 +112,11 @@ class CmdFlee(BaseCommand):
             self.caller.msg("|rThere is nowhere to run.|n")
             self.caller.adjust_sanity(-5)
             return
+
+        self.caller.db.combat_target = None
+        for s in self.caller.scripts.all():
+            if s.key == "player_combat":
+                s.stop()
 
         exit_obj = random.choice(exits)
         self.caller.msg(f"|yYou flee through {exit_obj.key}!|n")
@@ -138,8 +153,11 @@ class CmdConsider(BaseCommand):
         my_hp = self.caller.db.hp or 100
         their_hp = target.db.hp or 50
         ratio = their_hp / max(my_hp, 1)
+        is_boss = bool(getattr(target.db, "is_boss", False))
 
-        if ratio < 0.5:
+        if is_boss:
+            assessment = "|RThis is something you should not fight alone.|n"
+        elif ratio < 0.5:
             assessment = "|gWell within your means. For now.|n"
         elif ratio < 1.0:
             assessment = "|yFormidable. Caution is warranted.|n"
@@ -149,14 +167,3 @@ class CmdConsider(BaseCommand):
             assessment = "|rDo not fight this. Do not.|n"
 
         self.caller.msg(f"You study {target.key}: {assessment}")
-
-
-def _get_equipped_weapon(char):
-    equipped = char.db.equipped or {}
-    dbref = equipped.get("main_hand")
-    if dbref:
-        from evennia import search_object
-        results = search_object(dbref, use_dbref=True)
-        if results:
-            return results[0]
-    return None

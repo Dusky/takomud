@@ -122,3 +122,38 @@ class CmdTalk(BaseCommand):
                     ok, title = give_quest(self.caller, qdata)
                     if ok:
                         self.caller.msg(f"\n|y{target.key} has given you a quest: {title}|n")
+
+
+class CmdAbandon(BaseCommand):
+    """
+    Abandon an active quest.
+
+    Usage:
+      abandon <quest name>
+    """
+
+    key = "abandon"
+    help_category = "General"
+
+    def func(self):
+        if not self.args:
+            self.caller.msg("Abandon which quest?")
+            return
+
+        name = self.args.strip().lower()
+        quests = self.caller.db.quests or {}
+
+        for quest_key, q in quests.items():
+            if name in quest_key.lower() or name in q["title"].lower():
+                if q.get("completed"):
+                    self.caller.msg("You cannot abandon a completed quest.")
+                    return
+                title = q["title"]
+                del quests[quest_key]
+                self.caller.db.quests = quests
+                self.caller.msg(
+                    f"|rYou abandon {title}. Whatever you were meant to do is left undone.|n"
+                )
+                return
+
+        self.caller.msg("You have no quest matching that name.")

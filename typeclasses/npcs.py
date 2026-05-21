@@ -91,9 +91,24 @@ class NPC(ObjectParent, DefaultCharacter):
         )
         self._drop_loot()
         if killer:
-            killer.db.xp = (killer.db.xp or 0) + (self.db.xp_reward or 0)
-            if self.db.xp_reward:
-                killer.msg(f"|y+{self.db.xp_reward} XP|n")
+            xp = self.db.xp_reward or 0
+            if xp and hasattr(killer, "adjust_xp"):
+                killer.adjust_xp(xp)
+            elif xp:
+                killer.db.xp = (killer.db.xp or 0) + xp
+                killer.msg(f"|y+{xp} XP|n")
+            # Faction reputation consequence
+            faction = self.db.faction or "neutral"
+            if faction != "neutral" and hasattr(killer, "adjust_reputation"):
+                killer.adjust_reputation(faction, -5)
+                # Opposing factions gain rep
+                _FACTION_ENEMIES = {
+                    "remnants": [], "hollow": ["remnants", "wardens"],
+                    "scholars": [], "wardens": ["hollow", "unspoken"],
+                    "unspoken": ["wardens"],
+                }
+                for ally in _FACTION_ENEMIES.get(faction, []):
+                    killer.adjust_reputation(ally, 2)
         self.delete()
 
     def _drop_loot(self):
@@ -154,6 +169,11 @@ class Mob(NPC):
 
     def _start_combat(self, target):
         if self.db.combat_target:
+            return
+        # Commune: Hollow mobs do not aggro Cultists
+        if (self.db.faction == "hollow"
+                and utils.inherits_from(target, "typeclasses.characters.Character")
+                and (target.db.char_class or "") == "cultist"):
             return
         self.db.combat_target = target
         self.location.msg_contents(

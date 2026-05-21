@@ -68,6 +68,9 @@ class CmdLore(BaseCommand):
             self.caller.msg("|xSilence. Whatever history lived here has been consumed.|n")
             return
         self.caller.msg(f"|m--- Lore: {room.name} ---|n\n{text}")
+        # Scholar Veil-sight: no sanity cost
+        if (self.caller.db.char_class or "") != "scholar":
+            self.caller.adjust_sanity(-3)
 
 
 class CmdAtmosphere(BaseCommand):
@@ -261,3 +264,94 @@ class CmdCharClass(BaseCommand):
             f"{cls['desc']}\n\n"
             f"|xSpecial: {cls['special']}|n\n"
         )
+
+
+class CmdScore(BaseCommand):
+    """
+    Display your full character sheet.
+
+    Usage:
+      score
+      sheet
+    """
+
+    key = "score"
+    aliases = ["sheet", "sc"]
+    help_category = "General"
+
+    def func(self):
+        char = self.caller
+        from world.world_bible import CHARACTER_CLASSES
+
+        hp = char.db.hp or 0
+        hp_max = char.db.hp_max or 100
+        san = char.db.sanity or 0
+        san_max = char.db.sanity_max or 100
+        fear = char.db.fear or 0
+        xp = char.db.xp or 0
+        xp_next = char.db.xp_to_next or 100
+        level = char.db.level or 1
+        gold = char.db.gold or 0
+        cls_key = char.db.char_class or "none"
+        atk = char.db.attack_bonus or 0
+        defense = char.db.defense or 10
+
+        cls_data = CHARACTER_CLASSES.get(cls_key, {})
+        special = cls_data.get("special", "—")
+
+        rep = char.db.reputation or {}
+        rep_lines = "  ".join(
+            f"{f.title()}: {v:+d}" for f, v in rep.items() if v != 0
+        ) or "None"
+
+        quests_active = sum(1 for q in (char.db.quests or {}).values() if not q.get("completed"))
+
+        self.caller.msg(
+            f"\n|w=== {char.name} — Level {level} {cls_key.title()} ===|n\n"
+            f" HP      |g{hp}/{hp_max}|n\n"
+            f" Sanity  |c{san}/{san_max}|n\n"
+            f" Fear    |y{fear}/100|n\n"
+            f" XP      {xp}/{xp_next}\n"
+            f" Gold    |Y{gold}|n\n"
+            f" Attack  +{atk}   Defense {defense}\n"
+            f" Special |x{special}|n\n"
+            f" Rep     {rep_lines}\n"
+            f" Quests  {quests_active} active\n"
+        )
+
+
+class CmdTrack(BaseCommand):
+    """
+    Sense hostile creatures in adjacent rooms. Hunter special.
+
+    Usage:
+      track
+
+    Requires the Hunter class. Costs 5 fear to use.
+    """
+
+    key = "track"
+    help_category = "General"
+
+    def func(self):
+        if (self.caller.db.char_class or "") != "hunter":
+            self.caller.msg("|xYou have no instinct for tracking.|n")
+            return
+
+        self.caller.adjust_fear(5)
+        from evennia.utils import utils as ev_utils
+
+        found = []
+        for exit_obj in (self.caller.location.exits or []):
+            dest = exit_obj.destination
+            if not dest:
+                continue
+            for obj in dest.contents:
+                if (ev_utils.inherits_from(obj, "typeclasses.npcs.Mob")
+                        and obj.db.aggro):
+                    found.append(f"  |r{obj.key}|n — to the {exit_obj.key}")
+
+        if found:
+            self.caller.msg("|xYou sense:|n\n" + "\n".join(found))
+        else:
+            self.caller.msg("|xYou sense nothing immediately hostile nearby.|n")

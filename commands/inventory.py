@@ -204,3 +204,52 @@ class CmdDrop(BaseCommand):
         self.caller.location.msg_contents(
             f"{self.caller.name} drops {obj.key}.", exclude=[self.caller]
         )
+
+
+class CmdGive(BaseCommand):
+    """
+    Give an item from your inventory to another character or NPC in the room.
+
+    Usage:
+      give <item> to <target>
+    """
+
+    key = "give"
+    help_category = "General"
+
+    def func(self):
+        if not self.args or " to " not in self.args:
+            self.caller.msg("Usage: give <item> to <target>")
+            return
+
+        item_name, target_name = self.args.split(" to ", 1)
+        item_name = item_name.strip()
+        target_name = target_name.strip()
+
+        obj = self.caller.search(item_name, location=self.caller)
+        if not obj:
+            return
+
+        if not utils.inherits_from(obj, "typeclasses.items.Item"):
+            self.caller.msg("You can't give that.")
+            return
+
+        if not obj.db.droppable:
+            self.caller.msg(f"|rYou cannot give away {obj.key}.|n")
+            return
+
+        target = self.caller.search(target_name, location=self.caller.location)
+        if not target:
+            return
+
+        obj.location = target
+
+        self.caller.msg(f"You hand {obj.key} to {target.key}.")
+        self.caller.location.msg_contents(
+            f"{self.caller.name} hands {obj.key} to {target.key}.",
+            exclude=[self.caller]
+        )
+
+        if utils.inherits_from(target, "typeclasses.npcs.NPC"):
+            from world.quest_system import check_objective
+            check_objective(self.caller, "deliver", f"{obj.key}:{target.key}")
