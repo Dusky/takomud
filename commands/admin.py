@@ -186,6 +186,71 @@ class CmdGenerateQuest(BaseCommand):
         threading.Thread(target=_run, daemon=True, name="takomud-genquest").start()
 
 
+class CmdGenerateRegion(BaseCommand):
+    """
+    Generate an entire populated region via the Claude API.
+
+    Usage:
+      genregion <region name> [areas]
+
+    Generates <areas> coordinated areas (default 4) all set within the named
+    region, then creates a full faction questline with a herald NPC placed in
+    the first generated room. Everything runs in a background thread.
+
+    Example:
+      genregion The Ashfields
+      genregion The Sunken Library 6
+
+    Requires ANTHROPIC_API_KEY in the environment. Watch server logs for progress.
+    """
+
+    key = "genregion"
+    locks = "cmd:perm(Admin)"
+    help_category = "Admin"
+
+    def func(self):
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            self.caller.msg("|rANTHROPIC_API_KEY is not set.|n")
+            return
+
+        args = self.args.strip().split()
+        if not args:
+            self.caller.msg("Usage: genregion <region name> [areas]")
+            return
+
+        # Last token is areas count if numeric
+        if len(args) > 1 and args[-1].isdigit():
+            areas = int(args[-1])
+            region_name = " ".join(args[:-1])
+        else:
+            areas = 4
+            region_name = " ".join(args)
+
+        if areas < 1 or areas > 20:
+            self.caller.msg("|rAreas must be between 1 and 20.|n")
+            return
+
+        caller = self.caller
+
+        def _run():
+            try:
+                from world.generator import generate_region
+                caller.msg(
+                    f"|y[GenRegion] Generating {areas} areas in '{region_name}' "
+                    f"+ faction questline. This may take a few minutes...|n"
+                    f"|xWatch server logs for per-area progress.|n"
+                )
+                generate_region(region_name, areas=areas, delay=8)
+                caller.msg(
+                    f"|g[GenRegion] Done — '{region_name}' is live "
+                    f"({areas} areas, quests, populated rooms).|n"
+                )
+            except Exception as exc:
+                caller.msg(f"|r[GenRegion] Error: {exc}|n")
+
+        threading.Thread(target=_run, daemon=True, name="takomud-genregion").start()
+
+
 def _write_start_location(dbref):
     """Persist START_LOCATION and DEFAULT_HOME to secret_settings.py."""
     import os

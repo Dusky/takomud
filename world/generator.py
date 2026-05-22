@@ -1250,12 +1250,47 @@ Use the create_faction_questline tool.
 
     for block in response.content:
         if block.type == "tool_use" and block.name == "create_faction_questline":
-            data = block.input
-            _apply_faction_questline(data, herald_room_key=herald_room_key)
-            return data
+            raw = block.input
+            log.info(f"  [{faction}] Raw questline received. Running quality review...")
+            reviewed = _review_faction_questline(raw, key, faction)
+            log.info(f"  [{faction}] Review done. Applying...")
+            _apply_faction_questline(reviewed, herald_room_key=herald_room_key)
+            return reviewed
 
     log.error(f"No tool_use block in Claude response for {faction} questline")
     return None
+
+
+def _review_faction_questline(data, api_key, faction):
+    """Quality review pass for faction questline data."""
+    import anthropic
+    system = f"""You are a quality editor for Takomud, reviewing a {faction} faction questline.
+
+Fix:
+- Stage descriptions shorter than 2 sentences (expand them with dread and faction voice)
+- Objectives missing required fields (type, target/item/room/npc as appropriate)
+- Dialogue that sounds generic or cheerful (rewrite with faction-appropriate horror tone)
+- Missing reward fields (add xp, gold, reputation changes)
+- Herald NPC description shorter than 20 words (expand with physical and atmospheric detail)
+
+Return corrected data using the create_faction_questline tool."""
+
+    client = anthropic.Anthropic(api_key=api_key)
+    try:
+        response = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=5000,
+            system=system,
+            tools=[FACTION_QUESTLINE_TOOL],
+            tool_choice={"type": "tool", "name": "create_faction_questline"},
+            messages=[{"role": "user", "content": f"Review and correct:\n{json.dumps(data, indent=2)}"}],
+        )
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "create_faction_questline":
+                return block.input
+    except Exception as e:
+        log.warning(f"  Faction questline review failed, using original: {e}")
+    return data
 
 
 def _apply_faction_questline(data, herald_room_key=None):
@@ -1301,6 +1336,104 @@ def _apply_faction_questline(data, herald_room_key=None):
     state["all_npcs"][herald["key"]] = npc.dbref
     _save_state(state)
     log.info(f"  + Faction questline herald: {herald['key']} ({faction}) in {room_key}")
+
+
+# ---------------------------------------------------------------------------
+# Region generator — generates a complete coordinated region
+# ---------------------------------------------------------------------------
+
+def generate_region(region_name, areas=4, delay=10, api_key=None, with_questline=True):
+    """
+    Generate a complete region: N coordinated areas all sharing the same
+    region theme, plus a faction questline tied to the region's dominant faction.
+
+    The region queue is not advanced during generation — all cycles are locked
+    to this one region. After completion, the region is removed from the queue.
+
+    region_name: exact name from REGIONS list, or a custom string
+    areas: number of area cycles to generate (default 4)
+    with_questline: also generate a faction questline for the region's faction
+    """
+    from world.world_bible import REGIONS
+
+    key = api_key or os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        log.error("ANTHROPIC_API_KEY not set.")
+        return
+
+    # Find region data
+    region = next((r for r in REGIONS if r["name"] == region_name), None)
+    if not region:
+        region = {
+            "name": region_name,
+            "theme": f"horror region — {region_name}",
+            "horror_type": "psychological",
+        }
+
+    state = _load_state()
+    existing_rooms = list(state["all_rooms"].keys())
+
+    log.info(f"=== Generating region: {region['name']} ({areas} areas) ===")
+
+    created_areas = []
+    for i in range(areas):
+        log.info(f"  Area {i+1}/{areas} — {region['name']}")
+        try:
+            area_data = _call_claude(
+                prompt=None,
+                api_key=key,
+                existing_room_keys=existing_rooms[-20:],
+                region_name=region["name"],
+                region_theme=region.get("theme", ""),
+                horror_style=region.get("horror_type", "psychological"),
+            )
+            area_record = _apply_area(area_data, state)
+            created_areas.append(area_record)
+            existing_rooms = list(state["all_rooms"].keys())
+            _save_state(state)
+            log.info(f"  Area {i+1} done: {area_record['name']} ({len(area_record['rooms'])} rooms)")
+        except Exception as e:
+            log.error(f"  Area {i+1} failed: {e}", exc_info=True)
+
+        if i < areas - 1:
+            log.info(f"  Waiting {delay}s...")
+            time.sleep(delay)
+
+    # Remove from region queue if present
+    queue = state.get("region_queue", [])
+    if region_name in queue:
+        queue.remove(region_name)
+        state["region_queue"] = queue
+        _save_state(state)
+
+    log.info(f"=== Region {region['name']} complete: {len(created_areas)}/{areas} areas ===")
+
+    # Generate faction questline for the region's dominant faction
+    if with_questline:
+        faction_map = {
+            "The Sunken City": "hollow",
+            "The Pale Forest": "remnants",
+            "The Ossuarium": "scholars",
+            "The Observatory": "scholars",
+        }
+        faction = faction_map.get(region_name, "remnants")
+
+        # Place herald in first room of first generated area if possible
+        herald_room = None
+        if created_areas and created_areas[0].get("rooms"):
+            herald_room = created_areas[0]["rooms"][0]
+
+        log.info(f"=== Generating {faction} faction questline for {region_name} ===")
+        try:
+            generate_faction_questline(
+                faction=faction,
+                api_key=key,
+                herald_room_key=herald_room,
+            )
+        except Exception as e:
+            log.error(f"Faction questline generation failed: {e}", exc_info=True)
+
+    return created_areas
 
 
 # ---------------------------------------------------------------------------

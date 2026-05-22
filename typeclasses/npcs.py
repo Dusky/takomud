@@ -166,9 +166,6 @@ class Mob(NPC):
     def get_display_name(self, looker, **kwargs):
         return f"|r{self.key}|n"
 
-    def at_object_receive(self, obj, source_location, **kwargs):
-        pass
-
     def at_post_move(self, source_location, **kwargs):
         """Check for aggro targets when mob moves. Trigger hunter traps."""
         self._check_trap()

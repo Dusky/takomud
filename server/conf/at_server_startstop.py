@@ -30,7 +30,22 @@ def at_server_start():
     This is called every time the server starts up, regardless of
     how it was shut down.
     """
-    pass
+    # Reload quest registry from disk so active quests survive restarts/reloads
+    try:
+        from world import quest_registry
+        quest_registry.load_all()
+    except Exception as e:
+        import logging
+        logging.getLogger("takomud").error(f"Quest registry reload failed: {e}")
+
+    # Ensure the global RespawnScript is running
+    try:
+        import evennia
+        from typeclasses.scripts import RespawnScript
+        if not evennia.search_script("respawn_manager"):
+            evennia.create_script(RespawnScript)
+    except Exception:
+        pass
 
 
 def at_server_stop():

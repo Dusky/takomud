@@ -17,7 +17,7 @@ from commands.inventory import (
 )
 from commands.quest import CmdQuest, CmdTalk, CmdAbandon
 from commands.economy import CmdBrowse, CmdBuy, CmdSell
-from commands.admin import CmdGenerate, CmdGenerateStart, CmdGenerateQuest
+from commands.admin import CmdGenerate, CmdGenerateStart, CmdGenerateQuest, CmdGenerateRegion
 
 
 class CharacterCmdSet(default_cmds.CharacterCmdSet):
@@ -82,6 +82,7 @@ class AccountCmdSet(default_cmds.AccountCmdSet):
         self.add(CmdGenerate())
         self.add(CmdGenerateStart())
         self.add(CmdGenerateQuest())
+        self.add(CmdGenerateRegion())
         self.add(CmdWhere())
 
 

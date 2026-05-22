@@ -592,6 +592,31 @@ The hazard message is shown each tick. The only protection is to leave.
         """,
     },
     {
+        "key": "genregion",
+        "aliases": ["generate region", "region generation"],
+        "category": "Admin",
+        "text": """
+|wgenregion|n — Generate an entire populated region (Admin only).
+
+Usage:
+  genregion <region name>
+  genregion <region name> <areas>
+
+Generates N coordinated areas (default 4, max 20) all set within the named
+region, then creates a faction questline with a herald NPC placed in the
+first room that was generated. The entire process runs in a background thread.
+
+Examples:
+  genregion The Ashfields
+  genregion The Sunken Library 6
+
+Requires ANTHROPIC_API_KEY to be set in the server environment.
+Watch the server log for per-area progress messages.
+
+See also: |wgenerate|n, |wgenquest|n, |wgenstart|n
+        """,
+    },
+    {
         "key": "reputation gates",
         "aliases": ["rep gate", "reputation requirement"],
         "category": "World",

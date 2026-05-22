@@ -347,8 +347,8 @@ class SurgeScript(DefaultScript):
         self.desc = "Survivor surge."
         self.interval = 30
         self.persistent = False
-        self.start_delay = False
-        self.repeats = 1  # fires once to end the buff
+        self.start_delay = True   # fire AFTER 30s, not immediately
+        self.repeats = 1          # fire once to remove the buff
 
     def at_repeat(self):
         char = self.obj

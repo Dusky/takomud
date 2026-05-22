@@ -295,6 +295,11 @@ class Character(ObjectParent, DefaultCharacter):
     # ------------------------------------------------------------------
 
     def at_post_move(self, source_location, **kwargs):
+        # Movement cancels rest
+        for s in self.scripts.all():
+            if s.key == "rest_script":
+                self.msg("|xYou stand up.|n")
+                s.stop()
         room = self.location
         if room and room.dbref not in (self.db.discovered_rooms or []):
             discovered = self.db.discovered_rooms or []
