@@ -1,92 +1,108 @@
 # /autogen
 
-Autonomously generate the entire Takomud world — continuously, without user input.
+Continuously generate the Takomud world without user input. Each cycle produces one complete
+area (rooms + NPCs + mobs + items + quests + lore docs + optional boss + world events), passed
+through a two-stage AI review (quality → consistency) before being written to the database.
 
-The generator calls Claude claude-sonnet-4-6 once per area, producing rooms, NPCs, mobs, items, and quests
-that are thematically consistent and directly applied to the database. It works through all
-planned regions (Sunken City → Pale Forest → Ossuarium → Observatory) then invents new
-sub-regions indefinitely.
+## Prerequisites
 
-## Before running
-
-Set your API key:
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
+.venv/bin/evennia migrate   # if database not initialized
 ```
 
-Make sure the database is ready:
-```bash
-.venv/bin/evennia migrate
-```
+## Run
 
-Optionally, start the MUD server first (generator works either way):
-```bash
-.venv/bin/evennia start
-```
-
-## Run autonomous generation
-
-**Finite run (recommended first time — generates 10 areas):**
+**Finite (generate 10 areas, wait 15s between each):**
 ```bash
 .venv/bin/python world/generator.py --cycles 10 --delay 15
 ```
 
-**Infinite run (until you Ctrl+C):**
+**Infinite (until Ctrl+C):**
 ```bash
 .venv/bin/python world/generator.py --cycles 0 --delay 20
 ```
 
-**Background (detached, logs to file):**
+**Background:**
 ```bash
 nohup .venv/bin/python world/generator.py --cycles 0 --delay 20 > world/gen.log 2>&1 &
 echo "Generator PID: $!"
+tail -f world/gen.log
 ```
 
-To stop background generation:
-```bash
-kill $(cat world/gen.pid 2>/dev/null) 2>/dev/null || pkill -f "world/generator.py"
+**From evennia shell (server running):**
+```python
+from world.generator import generate
+generate(cycles=5)
 ```
+
+**In-game admin commands:**
+- `generate 5` — 5 areas in background thread
+- `generate 0` — infinite
+- `genstart` — regenerate The Threshold starting zone
+- `genquest <faction>` — generate faction questline (remnants/hollow/scholars/wardens/unspoken)
+
+## Generation order
+
+1. First run: generates **main questline** (herald NPC placed in The Threshold)
+2. Cycles through **region queue** in order: Sunken City → Pale Forest → Ossuarium → Observatory
+3. After all regions done: generates **sub-regions** with random horror styles
+4. Each area goes through: raw generation → quality review → consistency review → apply to DB
+
+## What each area contains (typical)
+
+| Content | Count |
+|---------|-------|
+| Rooms | 4–6 |
+| NPCs (non-hostile) | 1–3 |
+| Mobs (hostile) | 2–4 |
+| Boss encounters | 0–1 |
+| Items | 4–8 |
+| Lore documents | 1–2 |
+| Quests | 1–2 |
+| World events | 0–2 |
+
+## What gets applied per mob
+
+- HP, attack_bonus, defense, damage_dice, xp_reward, gold_drop
+- faction, aggro, wanders (→ WanderScript attached), status_effect, respawn_delay
+- loot_table (references item prototype_keys)
 
 ## Monitor progress
 
 ```bash
 tail -f world/gen.log
-```
 
-Or check the state file:
-```bash
-.venv/bin/python -c "
+# Or check state:
+python -c "
 import json
-with open('world/world_state.json') as f:
-    s = json.load(f)
-print(f'Areas generated: {s[\"generation_count\"]}')
-print(f'Rooms: {len(s[\"all_rooms\"])}')
-print(f'NPCs+Mobs: {len(s[\"all_npcs\"])}')
-print(f'Items: {len(s[\"all_items\"])}')
-print(f'Quests: {len(s[\"all_quests\"])}')
-print()
-print('Areas:')
-for a in s['areas']:
+s = json.load(open('world/world_state.json'))
+print(f'Areas: {s[\"generation_count\"]}  Rooms: {len(s[\"all_rooms\"])}  Mobs: {len(s[\"all_npcs\"])}')
+for a in s['areas'][-5:]:
     print(f'  {a[\"name\"]} ({len(a[\"rooms\"])} rooms)')
 "
 ```
 
-## Design
+## Faction questlines
 
-- **Regions** are generated in order: Threshold → Sunken City → Pale Forest → Ossuarium → Observatory
-- Each region has a distinct horror style (eldritch / folk / gothic / cosmic)
-- After all planned regions are done, the generator invents new sub-regions
-- Room connections are stitched to existing rooms so the world stays navigable
-- Item prototypes are registered in Evennia's prototype system so mobs can drop them
-- Quests are registered in `world/quest_registry.py` (in-memory) and on NPCs' `quest_keys` attribute
+Generate a questline for any of the 5 factions (3–5 stages, herald NPC placed in The Threshold):
 
-## What each cycle produces (typical)
-| Content | Count |
-|---------|-------|
-| Rooms   | 4–6   |
-| NPCs    | 1–3   |
-| Mobs    | 2–4   |
-| Items   | 4–8   |
-| Quests  | 1–2   |
+```bash
+# In-game
+genquest remnants
+genquest hollow
+genquest scholars
+genquest wardens
+genquest unspoken
 
-A complete world with all 5 planned regions = approximately 25–40 cycles (~150–240 rooms).
+# From code
+from world.generator import generate_faction_questline
+generate_faction_questline("hollow")
+```
+
+## Notes
+
+- World state persisted to `world/world_state.json` — do not edit manually
+- Generator can run while server is running or offline
+- Item prototypes are registered in Evennia's prototype system so mobs can drop them on death
+- Dead mobs are queued in the global `RespawnScript` and respawn after `respawn_delay` seconds

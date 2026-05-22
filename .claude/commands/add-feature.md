@@ -2,48 +2,110 @@
 
 Add a new game mechanic, system, or in-game command to Takomud.
 
-## What to do
-
-The user wants to add a feature. Before implementing, clarify:
+## Before implementing, clarify
 
 1. **What it does** — player-facing behavior in plain language
-2. **Scope** — is this a new command? A new typeclass attribute? A new script? A new system (combat, crafting, etc.)?
-3. **Who can use it** — all players, or staff only (Builder/Admin lock)?
+2. **Scope** — new command? new script? new typeclass attribute? new system?
+3. **Who can use it** — all players, or staff only (`locks = "cmd:perm(Builder)"` / `Admin`)?
+4. **Does it interact with existing systems?** — combat, quests, sanity, fear, economy?
 
 ## Implementation guide
 
 ### New in-game command
-- Add to `commands/horror.py` (horror/atmosphere commands) or create a new file `commands/<feature>.py`
-- Inherit from `evennia.commands.command.Command`
-- Register in `commands/default_cmdsets.py` → `CharacterCmdSet.at_cmdset_creation()`
-- Follow the existing pattern in `commands/horror.py`
 
-### New typeclass attribute
-- Add to `typeclasses/characters.py` → `at_object_creation()` for character stats
-- Add to `typeclasses/rooms.py` → `at_object_creation()` for room properties
-- Add to `typeclasses/objects.py` for item properties
+```python
+# commands/horror.py (horror/exploration/utility) or commands/<domain>.py
+from evennia.commands.command import Command as BaseCommand
+
+class CmdFoo(BaseCommand):
+    key = "foo"
+    aliases = ["f"]
+    help_category = "General"   # or "Combat", "Inventory", "Admin", etc.
+
+    def func(self):
+        # self.caller = the character
+        # self.args = everything after the command name (stripped)
+        # self.switches = list of /switch flags
+        pass
+```
+
+Register in `commands/default_cmdsets.py`:
+```python
+from commands.horror import CmdFoo
+# in CharacterCmdSet.at_cmdset_creation:
+self.add(CmdFoo())
+```
+
+Add help entry to `world/help_entries.py` in `HELP_ENTRY_DICTS`.
 
 ### New timed script
-- Add to `typeclasses/scripts.py`
-- Inherit from `DefaultScript`
-- Implement `at_script_creation()` (set interval, persistent) and `at_repeat()`
 
-### New world content (NPC, object prototype)
-- Add prototype dict to `world/prototypes.py`
-- Spawn via `world/batch_build.py` or in-game `spawn` command
+```python
+# typeclasses/scripts.py
+from evennia.scripts.scripts import DefaultScript
 
-## After implementing
+class FooScript(DefaultScript):
+    def at_script_creation(self):
+        self.key = "foo_script"
+        self.interval = 60        # seconds between at_repeat calls
+        self.persistent = True    # survives server restart
+        self.start_delay = True   # don't fire immediately
 
-Run the server reload to pick up code changes:
+    def at_repeat(self):
+        obj = self.obj  # attached object, or None if global
+        if not obj:
+            self.stop()
+            return
+        # do work
+```
+
+Attach: `obj.scripts.add(FooScript)` or `evennia.create_script(FooScript)` for global.
+
+### New typeclass attribute
+
+Add to `at_object_creation` of the relevant class:
+```python
+self.db.my_attr = default_value
+```
+
+Document in `CLAUDE.md` typeclass map.
+
+### New room attribute + builder command
+
+1. Add attribute in `Room.at_object_creation`
+2. Add `CmdSetFoo` with `locks = "cmd:perm(Builder)"` in `commands/horror.py`
+3. Register in cmdset
+
+### New item type / container
+
+Subclass `Item` in `typeclasses/items.py`, override `at_object_creation` and any hook methods.
+
+### New quest objective type
+
+Add handling to `check_objective()` in `world/quest_system.py` for the new `type` string.
+Add trigger call in the appropriate command/hook.
+
+## Syntax check after implementing
+
+```bash
+python -c "
+import ast
+for f in ['typeclasses/scripts.py','commands/horror.py','commands/default_cmdsets.py','world/help_entries.py']:
+    try:
+        ast.parse(open(f).read())
+        print(f'OK  {f}')
+    except SyntaxError as e:
+        print(f'ERR {f}:{e.lineno}: {e.msg}')
+"
+```
+
+## Reload
+
 ```bash
 .venv/bin/evennia reload
 ```
 
-Or restart if making settings changes:
-```bash
-.venv/bin/evennia restart
-```
-
 ## Horror design principle
 
-Every mechanic should have a cost or risk. Exploration degrades sanity. Light sources are finite. Safety is temporary. The game should never feel *comfortable*.
+Every mechanic must have a **cost or risk**. No free abilities. No safe states.
+Exploration degrades sanity. Light is finite. Resting can be interrupted. Death costs gold.
