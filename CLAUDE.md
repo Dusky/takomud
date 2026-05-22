@@ -6,6 +6,79 @@ AI review pipeline (quality → consistency) before touching the database.
 
 ---
 
+## Evennia reference — read this before touching any typeclass or command
+
+Evennia is the framework everything inherits from. When implementing or debugging anything,
+consult these docs first — do not guess at hook names or method signatures.
+
+| Topic | URL |
+|-------|-----|
+| **General overview** | https://www.evennia.com/docs/latest/index.html |
+| **Typeclasses** (Objects, Characters, Rooms, Exits) | https://www.evennia.com/docs/latest/Typeclasses.html |
+| **Commands** (syntax, switches, locks, help) | https://www.evennia.com/docs/latest/Commands.html |
+| **Command sets** (registration, priority, merging) | https://www.evennia.com/docs/latest/Command-Sets.html |
+| **Scripts** (at_script_creation, at_repeat, persistent) | https://www.evennia.com/docs/latest/Scripts.html |
+| **Objects** (DefaultObject hooks, at_get, at_drop, at_move) | https://www.evennia.com/docs/latest/Objects.html |
+| **Rooms** (DefaultRoom, return_appearance, at_object_receive) | https://www.evennia.com/docs/latest/Rooms.html |
+| **Characters** (DefaultCharacter, at_post_login, at_post_move) | https://www.evennia.com/docs/latest/Characters.html |
+| **Exits** (DefaultExit, at_traverse, locks) | https://www.evennia.com/docs/latest/Exits.html |
+| **DB attributes** (`obj.db.foo`, `obj.ndb.foo`, `AttributeProperty`) | https://www.evennia.com/docs/latest/Attributes.html |
+| **Searching** (`evennia.search_object`, `search_script`, `use_dbref`) | https://www.evennia.com/docs/latest/Searching.html |
+| **Prototypes** (save_prototype, spawner.spawn) | https://www.evennia.com/docs/latest/Prototypes.html |
+| **Locks** (lock strings, access checks, perm()) | https://www.evennia.com/docs/latest/Locks.html |
+| **Messaging** (`obj.msg()`, `room.msg_contents()`, exclude=[]) | https://www.evennia.com/docs/latest/Messaging.html |
+| **Sessions** (SESSION_HANDLER, get_puppet) | https://www.evennia.com/docs/latest/Sessions.html |
+| **Help system** (FILE_HELP_ENTRY_MODULES, HELP_ENTRY_DICTS) | https://www.evennia.com/docs/latest/Help-System.html |
+| **Spawner / batch creation** | https://www.evennia.com/docs/latest/Spawner-and-Prototypes.html |
+| **Unit testing** | https://www.evennia.com/docs/latest/Unit-Testing.html |
+
+### Critical patterns agents commonly get wrong
+
+**DB attributes** — always use `obj.db.attr`, never `obj.attr` for persistent data.
+`obj.ndb.attr` is non-persistent (lost on reload). Do not access Django model fields directly.
+
+**Hook names** — these are the ones we use; all are defined by Evennia:
+```
+at_object_creation()       # called once when object first created
+at_post_login()            # called after account logs in to puppet
+at_post_move(source)       # called on character after successful move
+at_object_receive(obj, src)# called on container/room when obj arrives
+at_traverse(traveller, dest)# called on exit; return False to block
+at_get(getter)             # called on item when picked up
+at_drop(dropper)           # called on item when dropped
+at_repeat()                # called on script each interval
+at_script_creation()       # called once when script is created
+```
+
+**Searching** — use `evennia.search_object(key, typeclass=MyClass)` or
+`evennia.search_object(dbref, use_dbref=True)`. Returns a list, not a single object.
+Always check `if results:` before indexing.
+
+**Creating objects** — `evennia.create_object(TypeClass, key="Name", location=room)`.
+Never instantiate typeclasses directly with `MyClass()`.
+
+**Creating scripts** — `obj.scripts.add(MyScript)` for object-attached scripts.
+`evennia.create_script(MyScript)` for global scripts (no obj).
+
+**Messages** — `obj.msg("text")` sends to that object's session.
+`room.msg_contents("text", exclude=[char])` sends to everyone in room except char.
+Evennia color codes: `|r` red, `|g` green, `|y` yellow, `|w` white, `|x` dark, `|n` reset,
+`|m` magenta, `|c` cyan, `|Y` bright yellow, `|R` bright red.
+
+**Command func()** — `self.caller` is the character. `self.args` is the raw argument string
+(already stripped). `self.switches` is a list of `/switch` flags. `self.lhs` / `self.rhs`
+split on `=`. Use `self.caller.search(name)` to find objects visible to the caller.
+
+**Locks** — `locks = "cmd:perm(Admin)"` restricts to Admin+.
+`"cmd:perm(Builder)"` for Builder+. `"cmd:all()"` for everyone (default).
+Check in code: `obj.access(caller, "lock_type")`.
+
+**Typeclass inheritance** — always call `super().at_object_creation()` first.
+`utils.inherits_from(obj, "typeclasses.npcs.Mob")` for isinstance-style checks across
+the typeclass system (use the string path, not the class itself, for safety).
+
+---
+
 ## Quick orientation
 
 ```

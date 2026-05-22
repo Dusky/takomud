@@ -2,6 +2,30 @@
 
 Add a new game mechanic, system, or in-game command to Takomud.
 
+## Evennia reference (read before touching any typeclass or command)
+
+Full docs: https://www.evennia.com/docs/latest/index.html
+
+Key pages:
+- Commands: https://www.evennia.com/docs/latest/Commands.html
+- Scripts: https://www.evennia.com/docs/latest/Scripts.html
+- Objects/hooks: https://www.evennia.com/docs/latest/Objects.html
+- DB attributes: https://www.evennia.com/docs/latest/Attributes.html
+- Searching: https://www.evennia.com/docs/latest/Searching.html
+- Prototypes/spawner: https://www.evennia.com/docs/latest/Prototypes.html
+- Locks: https://www.evennia.com/docs/latest/Locks.html
+
+**Patterns to get right:**
+- `obj.db.attr` for persistent data; `obj.ndb.attr` for non-persistent
+- `evennia.search_object(key_or_dbref)` returns a list — always check `if results:`
+- `evennia.create_object(TypeClass, key="Name", location=room)` — never instantiate directly
+- `obj.scripts.add(MyScript)` — attach script to object; `evennia.create_script(MyScript)` for global
+- `self.caller.search(name)` in commands finds objects visible to the caller
+- `room.msg_contents("text", exclude=[char])` sends to everyone in room except char
+- Always call `super().at_object_creation()` first in typeclass overrides
+
+---
+
 ## Before implementing, clarify
 
 1. **What it does** — player-facing behavior in plain language
