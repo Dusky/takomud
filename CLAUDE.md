@@ -245,7 +245,7 @@ Extends DefaultExit with: `locked`, `key_item` (item name required), `lock_desc`
 | `commands/inventory.py` | inventory, equip, unequip, use, drop, give, rest, inspect, open, close, put, take | all |
 | `commands/quest.py` | quest, talk, abandon | all |
 | `commands/economy.py` | browse, buy, sell | all |
-| `commands/admin.py` | generate, genstart, genquest, where | Admin |
+| `commands/admin.py` | generate, genstart, genquest, genregion, where | Admin |
 
 All commands are registered in `commands/default_cmdsets.py`.
 
@@ -259,7 +259,9 @@ All commands are registered in `commands/default_cmdsets.py`.
 - `generate(cycles=N)` — main loop; picks next region, calls Claude, applies to DB
 - `generate_starting_zone()` — generates The Threshold (called at first boot)
 - `generate_main_questline()` — generates overarching meta-narrative
-- `generate_faction_questline(faction)` — generates faction-specific questline
+- `generate_faction_questline(faction)` — generates faction-specific questline (with review pass)
+- `generate_region(name, areas=4, delay=10, with_questline=True)` — generates N coordinated areas
+  locked to one region, then auto-generates a faction questline with herald in the first room
 
 **Review pipeline (every generated area):**
 1. Claude generates raw area data (`_call_claude`)
@@ -381,6 +383,10 @@ All commands are registered in `commands/default_cmdsets.py`.
 - In-game: `genquest <faction>` (Admin command)
 - Code: `from world.generator import generate_faction_questline; generate_faction_questline("remnants")`
 
+### New full region (areas + questline + populated rooms)
+- In-game: `genregion <name> [areas]` (Admin command, default 4 areas)
+- Code: `from world.generator import generate_region; generate_region("The Ashfields", areas=6)`
+
 ---
 
 ## Design principles
@@ -419,14 +425,15 @@ commands/combat.py          — attack, stop, flee, consider
 commands/inventory.py       — inv, equip, use, drop, give, rest, inspect, containers
 commands/quest.py           — quest, talk, abandon
 commands/economy.py         — browse, buy, sell (with finite stock)
-commands/admin.py           — generate, genstart, genquest, where
+commands/admin.py           — generate, genstart, genquest, genregion, where
 commands/default_cmdsets.py — Command registration
 world/generator.py          — Autonomous world generator (Claude API)
 world/quest_system.py       — Quest objective checking and completion
-world/quest_registry.py     — In-memory quest data store
+world/quest_registry.py     — In-memory+disk quest data store (persists to quest_data.json)
 world/world_bible.py        — Lore, factions, classes, generation prompts
 world/help_entries.py       — In-game help text for all custom systems
-server/conf/at_initial_setup.py  — First-boot: generate starting zone, start RespawnScript
+server/conf/at_initial_setup.py     — First-boot: generate starting zone, start RespawnScript
+server/conf/at_server_startstop.py  — at_server_start: reload quests, ensure RespawnScript running
 server/conf/mssp.py         — MUD listing metadata
 world/world_state.json      — Generator state (do not edit manually)
 ```
